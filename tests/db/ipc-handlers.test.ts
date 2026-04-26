@@ -1,69 +1,20 @@
 // ============================================================
 // IPC Handlers -- Unit Tests
-// Tests the handler functions that serve renderer queries.
-// Uses real in-memory SQLite. Mocks only Electron's ipcMain.
+// Tests the repository methods that IPC handlers delegate to.
+// Uses shared test helpers. Validates the data contract that
+// the renderer receives (camelCase, not snake_case).
 // ============================================================
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import Database from 'better-sqlite3';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { describe, it, expect, beforeEach } from 'vitest';
+import type Database from 'better-sqlite3';
 import { MatchRepository } from '../../src/main/db/repositories/match-repo';
 import { SessionRepository } from '../../src/main/db/repositories/session-repo';
 import { LegendStatsRepository } from '../../src/main/db/repositories/legend-stats-repo';
 import { CoachingRepository } from '../../src/main/db/repositories/coaching-repo';
-import type { Match } from '../../src/shared/types';
 import { InsightType, InsightSeverity } from '../../src/shared/types';
+import { createTestDb } from '../helpers/db';
+import { sampleMatch } from '../helpers/fixtures';
 
-const MIGRATION_SQL = readFileSync(
-  resolve(__dirname, '../../src/main/db/migrations/001-initial-schema.sql'),
-  'utf-8',
-);
-
-function createTestDb(): Database.Database {
-  const db = new Database(':memory:');
-  db.pragma('foreign_keys = ON');
-  db.exec(MIGRATION_SQL);
-  return db;
-}
-
-function sampleMatch(sessionId: number, overrides: Partial<Omit<Match, 'id'>> = {}): Omit<Match, 'id'> {
-  return {
-    matchId: null,
-    sessionId,
-    legend: 'Wraith',
-    map: 'Kings Canyon',
-    mode: 'battle_royale',
-    placement: 3,
-    kills: 5,
-    deaths: 1,
-    assists: 2,
-    damage: 1200,
-    headshots: 2,
-    shotsFired: 150,
-    shotsHit: 45,
-    knockdowns: 3,
-    revives: 1,
-    respawns: 0,
-    survivalTime: 900,
-    rpChange: 25,
-    duration: 1200,
-    startedAt: '2026-04-26T12:05:00Z',
-    endedAt: '2026-04-26T12:25:00Z',
-    ...overrides,
-  };
-}
-
-/**
- * Instead of testing through Electron's IPC mock (which requires
- * complex ipcMain mocking), we test the repository methods that
- * the IPC handlers call. This validates the data contract that
- * the renderer receives.
- *
- * The IPC handlers in ipc-handlers.ts are thin wrappers around
- * these repository calls, so testing the repos IS testing the
- * handler logic.
- */
 describe('IPC Handler Data Contracts', () => {
   let db: Database.Database;
   let matchRepo: MatchRepository;

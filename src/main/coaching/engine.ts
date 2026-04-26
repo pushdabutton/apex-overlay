@@ -1,10 +1,11 @@
 // ============================================================
 // Coaching Engine -- Orchestrates rule evaluation, persists
-// insights, and broadcasts to UI
+// insights via CoachingRepository, and broadcasts to UI
 // ============================================================
 
 import type Database from 'better-sqlite3';
 import type { CoachingRule, RuleContext, RuleResult } from './types';
+import { CoachingRepository } from '../db/repositories/coaching-repo';
 import { broadcastToAll } from '../windows';
 import { IPC } from '../../shared/ipc-channels';
 import { nowISO } from '../../shared/utils';
@@ -17,14 +18,16 @@ import { WeaponPerformanceRule } from './rules/weapon-performance';
 
 export class CoachingEngine {
   private db: Database.Database;
+  private coachingRepo: CoachingRepository;
   private rules: CoachingRule[] = [];
   private ctx: RuleContext;
 
   // Deduplication: track insights emitted this session to avoid spam
   private sessionInsightKeys = new Set<string>();
 
-  constructor(db: Database.Database) {
+  constructor(db: Database.Database, coachingRepo?: CoachingRepository) {
     this.db = db;
+    this.coachingRepo = coachingRepo ?? new CoachingRepository(db);
 
     // Create rule context (provides DB access to rules)
     this.ctx = {
@@ -107,26 +110,20 @@ export class CoachingEngine {
     }
     this.sessionInsightKeys.add(dedupeKey);
 
-    // Persist to database
-    const stmt = this.db.prepare(`
-      INSERT INTO coaching_insights (match_id, session_id, type, rule_id, message, severity, data_json, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const result = stmt.run(
+    // Persist via CoachingRepository (includes repo-level dedup by matchId+type)
+    const insightId = this.coachingRepo.save({
       matchId,
       sessionId,
-      insight.type,
-      insight.ruleId,
-      insight.message,
-      insight.severity,
-      insight.data ? JSON.stringify(insight.data) : null,
-      nowISO(),
-    );
+      type: insight.type,
+      ruleId: insight.ruleId,
+      message: insight.message,
+      severity: insight.severity,
+      dataJson: insight.data ?? null,
+    });
 
     // Broadcast to UI
     broadcastToAll(IPC.COACHING_INSIGHT, {
-      id: Number(result.lastInsertRowid),
+      id: insightId,
       matchId,
       sessionId,
       ...insight,

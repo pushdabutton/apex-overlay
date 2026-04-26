@@ -1,64 +1,21 @@
 // ============================================================
 // Match Persistence End-to-End -- Unit Tests
 // Tests create, query by session/legend/recent, stats round-trip.
-// Uses real in-memory SQLite, no mocks.
+// Uses shared test helpers.
 // ============================================================
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import Database from 'better-sqlite3';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import type Database from 'better-sqlite3';
 import { MatchRepository } from '../../src/main/db/repositories/match-repo';
-import type { Match } from '../../src/shared/types';
-
-const MIGRATION_SQL = readFileSync(
-  resolve(__dirname, '../../src/main/db/migrations/001-initial-schema.sql'),
-  'utf-8',
-);
-
-function createTestDb(): Database.Database {
-  const db = new Database(':memory:');
-  db.pragma('foreign_keys = ON');
-  db.exec(MIGRATION_SQL);
-  // Insert a session for foreign key satisfaction
-  db.exec("INSERT INTO sessions (started_at) VALUES ('2026-04-26T10:00:00Z')");
-  db.exec("INSERT INTO sessions (started_at) VALUES ('2026-04-26T14:00:00Z')");
-  return db;
-}
-
-function sampleMatch(overrides: Partial<Omit<Match, 'id'>> = {}): Omit<Match, 'id'> {
-  return {
-    matchId: null,
-    sessionId: 1,
-    legend: 'Wraith',
-    map: 'Kings Canyon',
-    mode: 'battle_royale',
-    placement: 3,
-    kills: 5,
-    deaths: 1,
-    assists: 2,
-    damage: 1200,
-    headshots: 2,
-    shotsFired: 150,
-    shotsHit: 45,
-    knockdowns: 3,
-    revives: 1,
-    respawns: 0,
-    survivalTime: 900,
-    rpChange: 25,
-    duration: 1200,
-    startedAt: '2026-04-26T12:05:00Z',
-    endedAt: '2026-04-26T12:25:00Z',
-    ...overrides,
-  };
-}
+import { createTestDb } from '../helpers/db';
+import { sampleMatch } from '../helpers/fixtures';
 
 describe('Match Persistence E2E', () => {
   let db: Database.Database;
   let repo: MatchRepository;
 
   beforeEach(() => {
-    db = createTestDb();
+    db = createTestDb({ seedSessions: 2 });
     repo = new MatchRepository(db);
   });
 
@@ -74,9 +31,9 @@ describe('Match Persistence E2E', () => {
   });
 
   it('should find matches by session ID', () => {
-    repo.create(sampleMatch({ sessionId: 1 }));
-    repo.create(sampleMatch({ sessionId: 1, legend: 'Octane', startedAt: '2026-04-26T12:30:00Z' }));
-    repo.create(sampleMatch({ sessionId: 2, legend: 'Horizon', startedAt: '2026-04-26T14:05:00Z' }));
+    repo.create(sampleMatch(1));
+    repo.create(sampleMatch(1, { legend: 'Octane', startedAt: '2026-04-26T12:30:00Z' }));
+    repo.create(sampleMatch(2, { legend: 'Horizon', startedAt: '2026-04-26T14:05:00Z' }));
 
     const session1 = repo.findBySessionId(1);
     const session2 = repo.findBySessionId(2);

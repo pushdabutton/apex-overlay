@@ -2,6 +2,23 @@
 -- Migration 001: Initial Schema
 -- ============================================================
 
+-- Sessions: one row per play session (MUST come before matches for FK)
+CREATE TABLE IF NOT EXISTS sessions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at      TEXT NOT NULL,
+    ended_at        TEXT,
+    matches_played  INTEGER DEFAULT 0,
+    total_kills     INTEGER DEFAULT 0,
+    total_deaths    INTEGER DEFAULT 0,
+    total_assists   INTEGER DEFAULT 0,
+    total_damage    INTEGER DEFAULT 0,
+    total_headshots INTEGER DEFAULT 0,
+    avg_placement   REAL,
+    best_placement  INTEGER,
+    total_rp_change INTEGER DEFAULT 0,
+    created_at      TEXT DEFAULT (datetime('now'))
+);
+
 -- Matches: one row per completed game
 CREATE TABLE IF NOT EXISTS matches (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,23 +52,6 @@ CREATE INDEX IF NOT EXISTS idx_matches_session ON matches(session_id);
 CREATE INDEX IF NOT EXISTS idx_matches_legend ON matches(legend);
 CREATE INDEX IF NOT EXISTS idx_matches_started ON matches(started_at);
 CREATE INDEX IF NOT EXISTS idx_matches_mode ON matches(mode);
-
--- Sessions: one row per play session
-CREATE TABLE IF NOT EXISTS sessions (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    started_at      TEXT NOT NULL,
-    ended_at        TEXT,
-    matches_played  INTEGER DEFAULT 0,
-    total_kills     INTEGER DEFAULT 0,
-    total_deaths    INTEGER DEFAULT 0,
-    total_assists   INTEGER DEFAULT 0,
-    total_damage    INTEGER DEFAULT 0,
-    total_headshots INTEGER DEFAULT 0,
-    avg_placement   REAL,
-    best_placement  INTEGER,
-    total_rp_change INTEGER DEFAULT 0,
-    created_at      TEXT DEFAULT (datetime('now'))
-);
 
 -- Legend stats: aggregated lifetime stats per legend
 CREATE TABLE IF NOT EXISTS legend_stats (

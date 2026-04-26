@@ -1,77 +1,27 @@
 // ============================================================
 // Coaching Insights Persistence -- Unit Tests
 // Tests save, query by match, query recent, deduplication.
-// Uses real in-memory SQLite, no mocks.
+// Uses shared test helpers. Dead insertInsight() removed.
 // ============================================================
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import Database from 'better-sqlite3';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
-import { CoachingRepository, mapInsightRow } from '../../src/main/db/repositories/coaching-repo';
-import type { CoachingInsight } from '../../src/shared/types';
+import type Database from 'better-sqlite3';
+import { CoachingRepository } from '../../src/main/db/repositories/coaching-repo';
 import { InsightType, InsightSeverity } from '../../src/shared/types';
-
-const MIGRATION_SQL = readFileSync(
-  resolve(__dirname, '../../src/main/db/migrations/001-initial-schema.sql'),
-  'utf-8',
-);
-
-function createTestDb(): Database.Database {
-  const db = new Database(':memory:');
-  db.pragma('foreign_keys = ON');
-  db.exec(MIGRATION_SQL);
-  // Create a session and a match for FK references
-  db.exec("INSERT INTO sessions (started_at) VALUES ('2026-04-26T10:00:00Z')");
-  db.exec(`
-    INSERT INTO matches (session_id, legend, started_at)
-    VALUES (1, 'Wraith', '2026-04-26T10:05:00Z')
-  `);
-  db.exec(`
-    INSERT INTO matches (session_id, legend, started_at)
-    VALUES (1, 'Octane', '2026-04-26T10:30:00Z')
-  `);
-  return db;
-}
-
-/**
- * Helper to insert an insight directly into the DB.
- * The CoachingRepository from Phase 1 only has find/dismiss methods.
- * We need a save() method -- which is what Phase 2 tests require.
- */
-function insertInsight(
-  db: Database.Database,
-  insight: {
-    matchId: number | null;
-    sessionId: number | null;
-    type: string;
-    ruleId: string;
-    message: string;
-    severity: string;
-    dataJson?: Record<string, unknown> | null;
-  },
-): number {
-  const result = db.prepare(`
-    INSERT INTO coaching_insights (match_id, session_id, type, rule_id, message, severity, data_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    insight.matchId,
-    insight.sessionId,
-    insight.type,
-    insight.ruleId,
-    insight.message,
-    insight.severity,
-    insight.dataJson ? JSON.stringify(insight.dataJson) : null,
-  );
-  return Number(result.lastInsertRowid);
-}
+import { createTestDb } from '../helpers/db';
+import { sampleMatch } from '../helpers/fixtures';
+import { MatchRepository } from '../../src/main/db/repositories/match-repo';
 
 describe('Coaching Insights Persistence', () => {
   let db: Database.Database;
   let repo: CoachingRepository;
 
   beforeEach(() => {
-    db = createTestDb();
+    db = createTestDb({ seedSessions: 1 });
+    // Create two matches for FK references
+    const matchRepo = new MatchRepository(db);
+    matchRepo.create(sampleMatch({ legend: 'Wraith' }));
+    matchRepo.create(sampleMatch({ legend: 'Octane', startedAt: '2026-04-26T10:30:00Z' }));
     repo = new CoachingRepository(db);
   });
 
@@ -121,8 +71,7 @@ describe('Coaching Insights Persistence', () => {
   });
 
   it('should find recent insights in newest-first order', () => {
-    // Insert with slight time differences (SQLite datetime('now') has second granularity,
-    // so we insert manually with explicit timestamps)
+    // Insert with explicit timestamps for ordering
     db.prepare(`
       INSERT INTO coaching_insights (match_id, session_id, type, rule_id, message, severity, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)

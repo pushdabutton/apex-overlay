@@ -17,6 +17,7 @@ import { ApiScheduler } from './api/api-scheduler';
 import { MatchRepository } from './db/repositories/match-repo';
 import { SessionRepository } from './db/repositories/session-repo';
 import { LegendStatsRepository } from './db/repositories/legend-stats-repo';
+import { DailyAggregateRepository } from './db/repositories/daily-aggregate-repo';
 import { IPC } from '../shared/ipc-channels';
 import type { DomainEvent, Match } from '../shared/types';
 import { nowISO } from '../shared/utils';
@@ -43,6 +44,7 @@ async function bootstrap(): Promise<void> {
   const matchRepo = new MatchRepository(db);
   const sessionRepo = new SessionRepository(db);
   const legendStatsRepo = new LegendStatsRepository(db);
+  const dailyAggregateRepo = new DailyAggregateRepository(db);
 
   // 4. Create API client and scheduler
   const apiClient = new MozambiqueClient(db);
@@ -52,7 +54,7 @@ async function bootstrap(): Promise<void> {
   await createWindows();
 
   // 6. Register IPC handlers (renderer <-> main communication)
-  registerIpcHandlers(db, coachingEngine);
+  registerIpcHandlers(db);
 
   // 7. Initialize GEP via provider factory (CRITICAL FIX: was passing db, coachingEngine)
   const provider = createGEPProvider();
@@ -60,7 +62,7 @@ async function bootstrap(): Promise<void> {
 
   // 8. Wire the domain event pipeline (CRITICAL FIX: was not wired at all)
   gepManager.on('domain-event', (event: DomainEvent) => {
-    handleDomainEvent(event, matchRepo, sessionRepo, legendStatsRepo);
+    handleDomainEvent(event, matchRepo, sessionRepo, legendStatsRepo, dailyAggregateRepo);
   });
 
   await gepManager.initialize();
@@ -77,6 +79,7 @@ function handleDomainEvent(
   matchRepo: MatchRepository,
   sessionRepo: SessionRepository,
   legendStatsRepo: LegendStatsRepository,
+  dailyAggregateRepo: DailyAggregateRepository,
 ): void {
   switch (event.type) {
     case 'MATCH_START': {
@@ -133,6 +136,9 @@ function handleDomainEvent(
 
           // Recalculate legend stats
           legendStatsRepo.recalculate(currentLegend);
+
+          // Recalculate daily aggregates so session comparison coaching works
+          dailyAggregateRepo.recalculateToday();
         } catch (err) {
           console.error('[apex-coach] Failed to persist match data:', err);
         }

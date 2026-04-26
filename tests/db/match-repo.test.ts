@@ -1,83 +1,14 @@
 // ============================================================
 // Match Repository -- Unit Tests
-// Tests create(), row mapping (snake_case -> camelCase), and
-// query methods against an in-memory SQLite database.
+// Tests mapMatchRow (snake_case -> camelCase) and countByLegend.
+// Uses shared test helpers.
 // ============================================================
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import Database from 'better-sqlite3';
 import { MatchRepository, mapMatchRow } from '../../src/main/db/repositories/match-repo';
-import type { Match } from '../../src/shared/types';
-
-function createTestDb(): Database.Database {
-  const db = new Database(':memory:');
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-
-  // Create minimal schema needed for match-repo tests
-  db.exec(`
-    CREATE TABLE sessions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      started_at TEXT NOT NULL,
-      ended_at TEXT
-    );
-    INSERT INTO sessions (started_at) VALUES ('2026-04-26T12:00:00Z');
-
-    CREATE TABLE matches (
-      id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      match_id        TEXT UNIQUE,
-      session_id      INTEGER NOT NULL,
-      legend          TEXT NOT NULL,
-      map             TEXT,
-      mode            TEXT DEFAULT 'unknown',
-      placement       INTEGER,
-      kills           INTEGER DEFAULT 0,
-      deaths          INTEGER DEFAULT 0,
-      assists         INTEGER DEFAULT 0,
-      damage          INTEGER DEFAULT 0,
-      headshots       INTEGER DEFAULT 0,
-      shots_fired     INTEGER DEFAULT 0,
-      shots_hit       INTEGER DEFAULT 0,
-      knockdowns      INTEGER DEFAULT 0,
-      revives         INTEGER DEFAULT 0,
-      respawns        INTEGER DEFAULT 0,
-      survival_time   INTEGER DEFAULT 0,
-      rp_change       INTEGER,
-      duration        INTEGER DEFAULT 0,
-      started_at      TEXT NOT NULL,
-      ended_at        TEXT,
-      created_at      TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (session_id) REFERENCES sessions(id)
-    );
-  `);
-  return db;
-}
-
-function sampleMatch(): Omit<Match, 'id'> {
-  return {
-    matchId: null,
-    sessionId: 1,
-    legend: 'Wraith',
-    map: 'Kings Canyon',
-    mode: 'battle_royale',
-    placement: 3,
-    kills: 5,
-    deaths: 1,
-    assists: 2,
-    damage: 1200,
-    headshots: 2,
-    shotsFired: 150,
-    shotsHit: 45,
-    knockdowns: 3,
-    revives: 1,
-    respawns: 0,
-    survivalTime: 900,
-    rpChange: 25,
-    duration: 1200,
-    startedAt: '2026-04-26T12:05:00Z',
-    endedAt: '2026-04-26T12:25:00Z',
-  };
-}
+import { createTestDb } from '../helpers/db';
+import { sampleMatch } from '../helpers/fixtures';
+import type Database from 'better-sqlite3';
 
 describe('mapMatchRow', () => {
   it('should convert snake_case DB row to camelCase Match', () => {
@@ -147,7 +78,7 @@ describe('MatchRepository', () => {
   let repo: MatchRepository;
 
   beforeEach(() => {
-    db = createTestDb();
+    db = createTestDb({ seedSessions: 1 });
     repo = new MatchRepository(db);
   });
 
@@ -171,7 +102,7 @@ describe('MatchRepository', () => {
 
   it('should find matches by session id', () => {
     repo.create(sampleMatch());
-    repo.create({ ...sampleMatch(), legend: 'Octane', startedAt: '2026-04-26T12:30:00Z' });
+    repo.create(sampleMatch({ legend: 'Octane', startedAt: '2026-04-26T12:30:00Z' }));
 
     const matches = repo.findBySessionId(1);
     expect(matches).toHaveLength(2);
@@ -182,7 +113,7 @@ describe('MatchRepository', () => {
 
   it('should find recent matches with limit', () => {
     for (let i = 0; i < 5; i++) {
-      repo.create({ ...sampleMatch(), startedAt: `2026-04-26T12:0${i}:00Z` });
+      repo.create(sampleMatch({ startedAt: `2026-04-26T12:0${i}:00Z` }));
     }
 
     const recent = repo.findRecent(3);
@@ -191,8 +122,8 @@ describe('MatchRepository', () => {
 
   it('should find matches by legend', () => {
     repo.create(sampleMatch()); // Wraith
-    repo.create({ ...sampleMatch(), legend: 'Octane' });
-    repo.create({ ...sampleMatch(), legend: 'Wraith', startedAt: '2026-04-26T12:10:00Z' });
+    repo.create(sampleMatch({ legend: 'Octane' }));
+    repo.create(sampleMatch({ legend: 'Wraith', startedAt: '2026-04-26T12:10:00Z' }));
 
     const wraiths = repo.findByLegend('Wraith');
     expect(wraiths).toHaveLength(2);
@@ -201,8 +132,8 @@ describe('MatchRepository', () => {
 
   it('should count matches per legend', () => {
     repo.create(sampleMatch()); // Wraith
-    repo.create({ ...sampleMatch(), legend: 'Wraith', startedAt: '2026-04-26T12:10:00Z' });
-    repo.create({ ...sampleMatch(), legend: 'Octane' });
+    repo.create(sampleMatch({ legend: 'Wraith', startedAt: '2026-04-26T12:10:00Z' }));
+    repo.create(sampleMatch({ legend: 'Octane' }));
 
     const counts = repo.countByLegend();
     expect(counts).toHaveLength(2);

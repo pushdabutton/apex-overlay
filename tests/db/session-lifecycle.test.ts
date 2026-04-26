@@ -2,55 +2,15 @@
 // Session Lifecycle -- Unit Tests
 // Tests create, close, aggregates, zero-match edge case,
 // multi-session independence.
-// Uses real in-memory SQLite, no mocks.
+// Uses shared test helpers.
 // ============================================================
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import Database from 'better-sqlite3';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import type Database from 'better-sqlite3';
 import { SessionRepository } from '../../src/main/db/repositories/session-repo';
 import { MatchRepository } from '../../src/main/db/repositories/match-repo';
-import type { Match } from '../../src/shared/types';
-
-const MIGRATION_SQL = readFileSync(
-  resolve(__dirname, '../../src/main/db/migrations/001-initial-schema.sql'),
-  'utf-8',
-);
-
-function createTestDb(): Database.Database {
-  const db = new Database(':memory:');
-  db.pragma('foreign_keys = ON');
-  db.exec(MIGRATION_SQL);
-  return db;
-}
-
-function sampleMatch(sessionId: number, overrides: Partial<Omit<Match, 'id'>> = {}): Omit<Match, 'id'> {
-  return {
-    matchId: null,
-    sessionId,
-    legend: 'Wraith',
-    map: 'Kings Canyon',
-    mode: 'battle_royale',
-    placement: 3,
-    kills: 5,
-    deaths: 1,
-    assists: 2,
-    damage: 1200,
-    headshots: 2,
-    shotsFired: 150,
-    shotsHit: 45,
-    knockdowns: 3,
-    revives: 1,
-    respawns: 0,
-    survivalTime: 900,
-    rpChange: 25,
-    duration: 1200,
-    startedAt: '2026-04-26T12:05:00Z',
-    endedAt: '2026-04-26T12:25:00Z',
-    ...overrides,
-  };
-}
+import { createTestDb } from '../helpers/db';
+import { sampleMatch } from '../helpers/fixtures';
 
 describe('Session Lifecycle', () => {
   let db: Database.Database;
