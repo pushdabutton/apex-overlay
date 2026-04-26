@@ -41,7 +41,6 @@ export interface MatchState {
   setMatchResult: (result: MatchResult) => void;
   addCoachingInsight: (insight: MatchInsight) => void;
   resetMatch: () => void;
-  clearMatch: () => void;
 }
 
 const INITIAL_STATE = {
@@ -95,10 +94,6 @@ export const useMatchStore = create<MatchState>((set) => ({
   },
 
   resetMatch: () => {
-    set({ ...INITIAL_STATE });
-  },
-
-  clearMatch: () => {
     set({ ...INITIAL_STATE });
   },
 }));

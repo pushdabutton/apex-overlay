@@ -59,7 +59,7 @@ describe('Match Store', () => {
     expect(state.isInMatch).toBe(true);
   });
 
-  it('clearMatch resets to initial state', () => {
+  it('resetMatch resets to initial state', () => {
     useMatchStore.getState().setMatchResult({
       placement: 1,
       kills: 5,
@@ -70,7 +70,7 @@ describe('Match Store', () => {
       map: 'Storm Point',
     });
 
-    useMatchStore.getState().clearMatch();
+    useMatchStore.getState().resetMatch();
 
     const state = useMatchStore.getState();
     expect(state.kills).toBe(0);

@@ -20,7 +20,7 @@ export const PostMatchSummary = memo(function PostMatchSummary() {
   const legend = useMatchStore((s) => s.legend);
   const map = useMatchStore((s) => s.map);
   const coachingInsights = useMatchStore((s) => s.coachingInsights);
-  const removeInsight = useMatchStore((s) => s.clearMatch);
+  const removeInsight = useMatchStore((s) => s.resetMatch);
 
   const avgKills = useSessionStore((s) => s.avgKills);
   const avgDamage = useSessionStore((s) => s.avgDamage);

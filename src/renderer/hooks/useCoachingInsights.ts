@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CoachingInsight } from '../../shared/types';
 import { IPC } from '../../shared/ipc-channels';
 
@@ -8,6 +8,7 @@ import { IPC } from '../../shared/ipc-channels';
 export function useCoachingInsights() {
   const [latestInsight, setLatestInsight] = useState<CoachingInsight | null>(null);
   const [matchInsights, setMatchInsights] = useState<CoachingInsight[]>([]);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const unsub = window.apexCoach.on(IPC.COACHING_INSIGHT, (data) => {
@@ -15,9 +16,13 @@ export function useCoachingInsights() {
       setLatestInsight(insight);
       setMatchInsights((prev) => [insight, ...prev]);
 
+      // Clear any existing auto-dismiss timer
+      if (timerRef.current) clearTimeout(timerRef.current);
+
       // Auto-dismiss latest insight after 5 seconds
-      setTimeout(() => {
+      timerRef.current = setTimeout(() => {
         setLatestInsight((current) => (current?.id === insight.id ? null : current));
+        timerRef.current = null;
       }, 5000);
     });
 
@@ -28,6 +33,7 @@ export function useCoachingInsights() {
     });
 
     return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
       unsub();
       unsubMatch();
     };

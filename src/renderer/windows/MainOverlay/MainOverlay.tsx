@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { SessionTracker } from './SessionTracker';
 import { MapRotation } from './MapRotation';
 import { RankedProgress } from './RankedProgress';
 import { CoachingAlert } from './CoachingAlert';
 import { CraftingRotation } from '../../components/CraftingRotation';
 
-export function MainOverlay() {
+function MainOverlayInner() {
   return (
     <div className="overlay-panel p-3 w-[320px] min-h-[400px] flex flex-col gap-2">
       {/* Draggable header */}
@@ -31,3 +31,5 @@ export function MainOverlay() {
     </div>
   );
 }
+
+export const MainOverlay = memo(MainOverlayInner);

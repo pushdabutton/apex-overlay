@@ -1,10 +1,10 @@
-import React from 'react';
-import { MatchSummary } from './MatchSummary';
+import React, { memo } from 'react';
+import { PostMatchSummary } from './PostMatchSummary';
 import { PerformanceBenchmark } from './PerformanceBenchmark';
 import { CoachingTips } from './CoachingTips';
 import { LegendComparison } from './LegendComparison';
 
-export function PostMatch() {
+function PostMatchInner() {
   return (
     <div className="overlay-panel p-4 w-[600px] max-h-[700px] overflow-y-auto flex flex-col gap-3">
       {/* Draggable header */}
@@ -15,10 +15,12 @@ export function PostMatch() {
         </button>
       </div>
 
-      <MatchSummary />
+      <PostMatchSummary />
       <PerformanceBenchmark />
       <CoachingTips />
       <LegendComparison />
     </div>
   );
 }
+
+export const PostMatch = memo(PostMatchInner);
