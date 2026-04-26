@@ -3,7 +3,7 @@ import React, { memo } from 'react';
 interface InsightCardProps {
   message: string;
   severity: 'info' | 'warning' | 'suggestion' | 'achievement';
-  onDismiss: () => void;
+  onDismiss?: () => void;
 }
 
 const SEVERITY_CLASSES: Record<string, string> = {
@@ -25,13 +25,15 @@ export const InsightCard = memo(function InsightCard({
       className={`${severityClass} rounded-md px-3 py-2 border-l-4 flex items-start justify-between gap-2`}
     >
       <span className="text-overlay-sm text-white/90">{message}</span>
-      <button
-        onClick={onDismiss}
-        className="text-white/40 hover:text-white/70 text-xs shrink-0"
-        aria-label="Dismiss"
-      >
-        X
-      </button>
+      {onDismiss && (
+        <button
+          onClick={onDismiss}
+          className="text-white/40 hover:text-white/70 text-xs shrink-0"
+          aria-label="Dismiss"
+        >
+          X
+        </button>
+      )}
     </div>
   );
 });

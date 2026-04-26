@@ -20,7 +20,6 @@ export const PostMatchSummary = memo(function PostMatchSummary() {
   const legend = useMatchStore((s) => s.legend);
   const map = useMatchStore((s) => s.map);
   const coachingInsights = useMatchStore((s) => s.coachingInsights);
-  const removeInsight = useMatchStore((s) => s.resetMatch);
 
   const avgKills = useSessionStore((s) => s.avgKills);
   const avgDamage = useSessionStore((s) => s.avgDamage);
@@ -62,10 +61,6 @@ export const PostMatchSummary = memo(function PostMatchSummary() {
               key={insight.id}
               message={insight.message}
               severity={insight.severity as 'info' | 'warning' | 'suggestion' | 'achievement'}
-              onDismiss={() => {
-                // In a real impl this would dismiss individual insights
-                void removeInsight;
-              }}
             />
           ))}
         </div>
