@@ -13,8 +13,17 @@ export default defineConfig({
     globals: true,
     include: [
       'src/**/__tests__/**/*.test.ts',
+      'src/**/__tests__/**/*.test.tsx',
       'tests/**/*.test.ts',
+      'tests/**/*.test.tsx',
     ],
     exclude: ['node_modules', 'dist'],
+    // Default environment for main process tests
+    environment: 'node',
+    // Per-file environment overrides via @vitest-environment jsdom comment
+    environmentMatchGlobs: [
+      ['tests/renderer/**', 'jsdom'],
+      ['src/renderer/**', 'jsdom'],
+    ],
   },
 });

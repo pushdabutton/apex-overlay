@@ -1,13 +1,14 @@
 import { create } from 'zustand';
 import { kdRatio } from '../../shared/utils';
 
-interface SessionState {
+export interface SessionState {
   matchesPlayed: number;
   totalKills: number;
   totalDeaths: number;
   totalAssists: number;
   totalDamage: number;
   totalHeadshots: number;
+  totalKnockdowns: number;
   avgKills: number;
   avgDamage: number;
   bestPlacement: number | null;
@@ -25,6 +26,7 @@ export const useSessionStore = create<SessionState>((set) => ({
   totalAssists: 0,
   totalDamage: 0,
   totalHeadshots: 0,
+  totalKnockdowns: 0,
   avgKills: 0,
   avgDamage: 0,
   bestPlacement: null,
@@ -45,6 +47,7 @@ export const useSessionStore = create<SessionState>((set) => ({
         totalAssists: (data.totalAssists as number) ?? state.totalAssists,
         totalDamage,
         totalHeadshots: (data.totalHeadshots as number) ?? state.totalHeadshots,
+        totalKnockdowns: (data.totalKnockdowns as number) ?? state.totalKnockdowns,
         avgKills: matchesPlayed > 0 ? totalKills / matchesPlayed : 0,
         avgDamage: matchesPlayed > 0 ? totalDamage / matchesPlayed : 0,
         bestPlacement: (data.bestPlacement as number) ?? state.bestPlacement,
@@ -61,6 +64,7 @@ export const useSessionStore = create<SessionState>((set) => ({
       totalAssists: 0,
       totalDamage: 0,
       totalHeadshots: 0,
+      totalKnockdowns: 0,
       avgKills: 0,
       avgDamage: 0,
       bestPlacement: null,

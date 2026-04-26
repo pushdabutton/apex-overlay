@@ -1,9 +1,13 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { clamp } from '../../shared/utils';
 
 interface ProgressBarProps {
-  current: number;
-  max: number;
+  /** Percentage (0-100). Takes priority over current/max if provided. */
+  percent?: number;
+  /** Current value (legacy API, used with max) */
+  current?: number;
+  /** Max value (legacy API, used with current) */
+  max?: number;
   label?: string;
   color?: 'blue' | 'green' | 'gold' | 'red' | 'purple';
 }
@@ -16,8 +20,21 @@ const COLOR_MAP = {
   purple: 'bg-apex-purple',
 };
 
-export function ProgressBar({ current, max, label, color = 'blue' }: ProgressBarProps) {
-  const percentage = clamp((current / Math.max(max, 1)) * 100, 0, 100);
+export const ProgressBar = memo(function ProgressBar({
+  percent,
+  current,
+  max,
+  label,
+  color = 'blue',
+}: ProgressBarProps) {
+  // Support both percent prop and current/max calculation
+  const rawPercent = percent !== undefined
+    ? percent
+    : (current !== undefined && max !== undefined)
+      ? (current / Math.max(max, 1)) * 100
+      : 0;
+
+  const percentage = clamp(rawPercent, 0, 100);
   const barColor = COLOR_MAP[color] ?? COLOR_MAP.blue;
 
   return (
@@ -30,10 +47,10 @@ export function ProgressBar({ current, max, label, color = 'blue' }: ProgressBar
       )}
       <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
         <div
-          className={`h-full ${barColor} rounded-full transition-all duration-300`}
+          className={`h-full ${barColor} rounded-full`}
           style={{ width: `${percentage}%` }}
         />
       </div>
     </div>
   );
-}
+});
