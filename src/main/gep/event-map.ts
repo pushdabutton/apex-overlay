@@ -70,14 +70,17 @@ export function mapGepEvent(
           matchTime,
         };
 
-      case 'damage':
+      case 'damage': {
+        const amount = parseInt(data.damageAmount, 10);
+        if (isNaN(amount) || amount <= 0) return null; // Skip events with no valid damage
         return {
           type: 'DAMAGE_DEALT',
-          amount: parseInt(data.damageAmount ?? '0', 10),
+          amount,
           target: data.targetName ?? 'Unknown',
           weapon: data.weapon ?? 'Unknown',
           timestamp: now,
         };
+      }
 
       case 'revive':
         return {

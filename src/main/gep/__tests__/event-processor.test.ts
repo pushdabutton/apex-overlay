@@ -139,6 +139,34 @@ describe('EventProcessor', () => {
     }
   });
 
+  it('should skip damage events with null or invalid damageAmount', () => {
+    // Null damage -- should be silently dropped
+    processor.processRawEvent('damage', JSON.stringify({
+      damageAmount: null,
+      targetName: 'Player1',
+      weapon: 'R-301',
+    }));
+
+    // Undefined damage
+    processor.processRawEvent('damage', JSON.stringify({
+      targetName: 'Player2',
+      weapon: 'R-301',
+    }));
+
+    // Zero damage
+    processor.processRawEvent('damage', JSON.stringify({
+      damageAmount: '0',
+      targetName: 'Player3',
+      weapon: 'R-301',
+    }));
+
+    // No events should be emitted for invalid/zero damage
+    expect(emittedEvents).toHaveLength(0);
+
+    const stats = processor.getSessionStats();
+    expect(stats.damage).toBe(0);
+  });
+
   // -----------------------------------------------------------------------
   // Event Batching
   // -----------------------------------------------------------------------
