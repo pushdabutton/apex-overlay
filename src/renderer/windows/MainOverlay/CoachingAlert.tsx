@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { InsightBadge } from '../../components/InsightBadge';
 import { useCoachingInsights } from '../../hooks/useCoachingInsights';
 
-export function CoachingAlert() {
+function CoachingAlertInner() {
   const { latestInsight } = useCoachingInsights();
 
   if (!latestInsight) return null;
@@ -13,3 +13,5 @@ export function CoachingAlert() {
     </div>
   );
 }
+
+export const CoachingAlert = memo(CoachingAlertInner);

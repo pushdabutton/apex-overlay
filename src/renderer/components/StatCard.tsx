@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { TrendIndicator } from './TrendIndicator';
 import { formatCompact } from '../../shared/utils';
 
@@ -10,7 +10,7 @@ interface StatCardProps {
   trend?: 'up' | 'down' | 'neutral';
 }
 
-export function StatCard({ label, value, previousValue, compact }: StatCardProps) {
+export const StatCard = memo(function StatCard({ label, value, previousValue, compact }: StatCardProps) {
   const displayValue = typeof value === 'number' ? formatCompact(value) : value;
 
   return (
@@ -24,4 +24,4 @@ export function StatCard({ label, value, previousValue, compact }: StatCardProps
       )}
     </div>
   );
-}
+});
