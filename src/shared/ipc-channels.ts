@@ -16,7 +16,6 @@ export const IPC = {
   GAME_PHASE: 'game:phase',
 
   // Renderer -> Main (requests)
-  DB_QUERY: 'db:query',
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
   SETTINGS_GET_ALL: 'settings:get-all',

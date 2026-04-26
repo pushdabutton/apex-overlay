@@ -22,11 +22,51 @@ export function mapInsightRow(row: any): CoachingInsight {
   };
 }
 
+export interface SaveInsightInput {
+  matchId: number | null;
+  sessionId: number | null;
+  type: string;
+  ruleId: string;
+  message: string;
+  severity: string;
+  dataJson?: Record<string, unknown> | null;
+}
+
 export class CoachingRepository {
   private db: Database.Database;
 
   constructor(db: Database.Database) {
     this.db = db;
+  }
+
+  /**
+   * Save a coaching insight with deduplication.
+   * If an insight with the same type and match_id already exists, skip the insert.
+   * Returns the ID of the existing or newly created row.
+   */
+  save(insight: SaveInsightInput): number {
+    // Deduplication: check if same type + match already exists
+    if (insight.matchId != null) {
+      const existing = this.db.prepare(
+        'SELECT id FROM coaching_insights WHERE match_id = ? AND type = ?',
+      ).get(insight.matchId, insight.type) as { id: number } | undefined;
+
+      if (existing) return existing.id;
+    }
+
+    const result = this.db.prepare(`
+      INSERT INTO coaching_insights (match_id, session_id, type, rule_id, message, severity, data_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      insight.matchId,
+      insight.sessionId,
+      insight.type,
+      insight.ruleId,
+      insight.message,
+      insight.severity,
+      insight.dataJson ? JSON.stringify(insight.dataJson) : null,
+    );
+    return Number(result.lastInsertRowid);
   }
 
   findByMatchId(matchId: number): CoachingInsight[] {
