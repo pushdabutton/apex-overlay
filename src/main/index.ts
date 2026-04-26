@@ -99,40 +99,55 @@ function handleDomainEvent(
     case 'MATCH_END': {
       if (currentSessionId !== null && matchStartedAt) {
         const matchStats = gepManager.getProcessor().getCurrentMatchStats();
-        const matchId = matchRepo.create({
-          matchId: null,
-          sessionId: currentSessionId,
-          legend: currentLegend,
-          map: currentMap,
-          mode: currentMode,
-          placement: null,
-          kills: matchStats.kills,
-          deaths: matchStats.deaths,
-          assists: matchStats.assists,
-          damage: matchStats.damage,
-          headshots: matchStats.headshots,
-          shotsFired: 0,
-          shotsHit: 0,
-          knockdowns: matchStats.knockdowns,
-          revives: matchStats.revives,
-          respawns: matchStats.respawns,
-          survivalTime: 0,
-          rpChange: null,
-          duration: 0,
-          startedAt: matchStartedAt,
-          endedAt: nowISO(),
-        });
+        let matchId: number | null = null;
 
-        // Update session aggregates
-        sessionRepo.updateAggregates(currentSessionId);
+        // Persist match data — wrapped in try/catch so a DB failure
+        // doesn't kill coaching evaluation or UI updates
+        try {
+          matchId = matchRepo.create({
+            matchId: null,
+            sessionId: currentSessionId,
+            legend: currentLegend,
+            map: currentMap,
+            mode: currentMode,
+            placement: null,
+            kills: matchStats.kills,
+            deaths: matchStats.deaths,
+            assists: matchStats.assists,
+            damage: matchStats.damage,
+            headshots: matchStats.headshots,
+            shotsFired: 0,
+            shotsHit: 0,
+            knockdowns: matchStats.knockdowns,
+            revives: matchStats.revives,
+            respawns: matchStats.respawns,
+            survivalTime: 0,
+            rpChange: null,
+            duration: 0,
+            startedAt: matchStartedAt,
+            endedAt: nowISO(),
+          });
 
-        // Recalculate legend stats
-        legendStatsRepo.recalculate(currentLegend);
+          // Update session aggregates
+          sessionRepo.updateAggregates(currentSessionId);
 
-        // Run coaching evaluation
-        coachingEngine.evaluatePostMatch(matchId, currentSessionId);
+          // Recalculate legend stats
+          legendStatsRepo.recalculate(currentLegend);
+        } catch (err) {
+          console.error('[apex-coach] Failed to persist match data:', err);
+        }
 
-        // Broadcast match end to renderer
+        // Run coaching evaluation — even if DB write failed, we can
+        // still evaluate from in-memory stats
+        try {
+          if (matchId !== null) {
+            coachingEngine.evaluatePostMatch(matchId, currentSessionId);
+          }
+        } catch (err) {
+          console.error('[apex-coach] Coaching evaluation failed:', err);
+        }
+
+        // Always broadcast to UI so the player sees their stats
         broadcastToAll(IPC.MATCH_END, {
           matchId,
           sessionId: currentSessionId,
