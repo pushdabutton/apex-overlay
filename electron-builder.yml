@@ -1,0 +1,29 @@
+# Electron Builder configuration for Apex Coach overlay
+appId: ai.purebrain.apex-coach
+productName: Apex Coach
+copyright: Copyright 2026 PureBrain
+
+directories:
+  output: release
+  buildResources: assets
+
+files:
+  - dist/**/*
+  - assets/**/*
+  - overwolf.manifest.json
+  - "!node_modules/**/*"
+
+extraResources:
+  - from: assets/
+    to: assets/
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: assets/icons/icon-256.png
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

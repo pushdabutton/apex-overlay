@@ -1,0 +1,207 @@
+// ============================================================
+// mozambiquehe.re API Client
+// Player stats, map rotation, and crafting rotation
+// ============================================================
+
+import type Database from 'better-sqlite3';
+import type { MapRotation, CraftingItem, PlayerProfile } from '../../shared/types';
+
+const BASE_URL = 'https://api.mozambiquehe.re';
+
+interface CacheEntry<T> {
+  data: T;
+  fetchedAt: number;
+  ttlMs: number;
+}
+
+export class MozambiqueClient {
+  private db: Database.Database;
+  private apiKey: string | null = null;
+  private cache = new Map<string, CacheEntry<unknown>>();
+
+  constructor(db: Database.Database) {
+    this.db = db;
+    this.loadApiKey();
+  }
+
+  private loadApiKey(): void {
+    try {
+      const row = this.db.prepare('SELECT value FROM settings WHERE key = ?').get('api.key') as
+        | { value: string }
+        | undefined;
+      this.apiKey = row?.value ?? null;
+    } catch {
+      // Settings table may not exist yet during first run
+      this.apiKey = null;
+    }
+  }
+
+  setApiKey(key: string): void {
+    this.apiKey = key;
+  }
+
+  isConfigured(): boolean {
+    return !!this.apiKey;
+  }
+
+  /**
+   * Fetch player profile and stats.
+   */
+  async fetchPlayerProfile(playerName: string, platform: string): Promise<PlayerProfile | null> {
+    if (!this.apiKey) return null;
+
+    const cacheKey = `profile:${platform}:${playerName}`;
+    const cached = this.getFromCache<PlayerProfile>(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const url = `${BASE_URL}/bridge?player=${encodeURIComponent(playerName)}&platform=${platform}&auth=${this.apiKey}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        console.error(`[API] Player profile fetch failed: ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+
+      const profile: PlayerProfile = {
+        platform,
+        playerName: data.global?.name ?? playerName,
+        uid: data.global?.uid?.toString() ?? '',
+        level: data.global?.level ?? 0,
+        rankName: data.global?.rank?.rankName ?? 'Unknown',
+        rankScore: data.global?.rank?.rankScore ?? 0,
+        rankDivision: data.global?.rank?.rankDiv ?? 0,
+      };
+
+      // Cache in memory
+      this.setCache(cacheKey, profile, 5 * 60 * 1000);
+
+      // Cache in SQLite for offline access
+      this.db.prepare(`
+        INSERT INTO player_profile (platform, player_name, player_uid, level, rank_name, rank_score, rank_division, data_json, fetched_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(
+        profile.platform,
+        profile.playerName,
+        profile.uid,
+        profile.level,
+        profile.rankName,
+        profile.rankScore,
+        profile.rankDivision,
+        JSON.stringify(data),
+      );
+
+      return profile;
+    } catch (error) {
+      console.error('[API] Player profile fetch error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch current map rotation.
+   */
+  async fetchMapRotation(): Promise<MapRotation | null> {
+    if (!this.apiKey) return null;
+
+    const cacheKey = 'map-rotation';
+    const cached = this.getFromCache<MapRotation>(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const url = `${BASE_URL}/maprotation?version=2&auth=${this.apiKey}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        console.error(`[API] Map rotation fetch failed: ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+
+      const rotation: MapRotation = {
+        current: {
+          map: data.battle_royale?.current?.map ?? 'Unknown',
+          remainingTimer: data.battle_royale?.current?.remainingSecs ?? 0,
+          asset: data.battle_royale?.current?.asset ?? '',
+        },
+        next: {
+          map: data.battle_royale?.next?.map ?? 'Unknown',
+          durationMinutes: data.battle_royale?.next?.DurationInMinutes ?? 0,
+        },
+      };
+
+      this.setCache(cacheKey, rotation, 60 * 1000);
+      return rotation;
+    } catch (error) {
+      console.error('[API] Map rotation fetch error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch current crafting rotation.
+   */
+  async fetchCraftingRotation(): Promise<CraftingItem[] | null> {
+    if (!this.apiKey) return null;
+
+    const cacheKey = 'crafting';
+    const cached = this.getFromCache<CraftingItem[]>(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const url = `${BASE_URL}/crafting?auth=${this.apiKey}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        console.error(`[API] Crafting fetch failed: ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+
+      // Flatten the crafting rotation into a simple item list
+      const items: CraftingItem[] = [];
+      if (Array.isArray(data)) {
+        for (const bundle of data) {
+          if (bundle.bundleContent && Array.isArray(bundle.bundleContent)) {
+            for (const item of bundle.bundleContent) {
+              items.push({
+                item: item.itemType?.name ?? 'Unknown',
+                cost: item.cost ?? 0,
+                itemType: {
+                  name: item.itemType?.name ?? 'Unknown',
+                  rarity: item.itemType?.rarity ?? 'Common',
+                },
+              });
+            }
+          }
+        }
+      }
+
+      this.setCache(cacheKey, items, 5 * 60 * 1000);
+      return items;
+    } catch (error) {
+      console.error('[API] Crafting fetch error:', error);
+      return null;
+    }
+  }
+
+  // --- Cache helpers ---
+
+  private getFromCache<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.fetchedAt > entry.ttlMs) {
+      this.cache.delete(key);
+      return null;
+    }
+    return entry.data as T;
+  }
+
+  private setCache<T>(key: string, data: T, ttlMs: number): void {
+    this.cache.set(key, { data, fetchedAt: Date.now(), ttlMs });
+  }
+}

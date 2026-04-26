@@ -1,0 +1,100 @@
+{
+  "manifest_version": 1,
+  "type": "Electron",
+  "meta": {
+    "name": "Apex Coach",
+    "author": "PureBrain",
+    "version": "1.0.0",
+    "description": "Real-time coaching overlay for Apex Legends. Actionable insights, not just stats.",
+    "icon": "assets/icons/icon-256.png"
+  },
+  "permissions": [
+    "GameEvents"
+  ],
+  "data": {
+    "game_targeting": {
+      "game_ids": [21170]
+    },
+    "game_events": {
+      "21170": {
+        "features": [
+          "kill",
+          "death",
+          "assist",
+          "knockdown",
+          "damage",
+          "revive",
+          "respawn",
+          "match_info",
+          "game_info",
+          "rank",
+          "me"
+        ]
+      }
+    },
+    "windows": {
+      "main_overlay": {
+        "file": "index.html?window=main-overlay",
+        "transparent": true,
+        "resizable": true,
+        "override_on_update": true,
+        "size": { "width": 320, "height": 480 },
+        "min_size": { "width": 280, "height": 400 },
+        "start_position": { "top": 10, "right": 10 },
+        "topmost": true,
+        "in_game_only": true,
+        "clickthrough": false
+      },
+      "post_match": {
+        "file": "index.html?window=post-match",
+        "transparent": true,
+        "resizable": true,
+        "size": { "width": 600, "height": 700 },
+        "start_position": "center",
+        "topmost": true,
+        "in_game_only": false
+      },
+      "session_dashboard": {
+        "file": "index.html?window=session-dashboard",
+        "transparent": true,
+        "resizable": true,
+        "size": { "width": 800, "height": 600 },
+        "start_position": "center",
+        "topmost": false,
+        "in_game_only": false
+      },
+      "settings": {
+        "file": "index.html?window=settings",
+        "transparent": false,
+        "resizable": false,
+        "size": { "width": 500, "height": 600 },
+        "start_position": "center",
+        "topmost": true,
+        "in_game_only": false
+      }
+    },
+    "hotkeys": {
+      "toggle_overlay": {
+        "title": "Toggle Overlay",
+        "default": "Ctrl+Shift+A",
+        "action-type": "toggle",
+        "game_ids": [21170]
+      },
+      "open_settings": {
+        "title": "Open Settings",
+        "default": "Ctrl+Shift+S",
+        "action-type": "toggle",
+        "game_ids": [21170]
+      },
+      "open_dashboard": {
+        "title": "Open Dashboard",
+        "default": "Ctrl+Shift+D",
+        "action-type": "toggle",
+        "game_ids": [21170]
+      }
+    },
+    "launch_events": [
+      { "event": "GameLaunch", "game_ids": [21170] }
+    ]
+  }
+}
