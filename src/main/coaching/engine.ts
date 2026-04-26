@@ -9,12 +9,11 @@ import { broadcastToAll } from '../windows';
 import { IPC } from '../../shared/ipc-channels';
 import { nowISO } from '../../shared/utils';
 
-// Import rule modules (will be implemented as separate files)
-// import { SessionComparisonRule } from './rules/session-comparison';
-// import { TrendDetectionRule } from './rules/trend-detection';
-// import { LegendRecommendationRule } from './rules/legend-recommendation';
-// import { DeathTimingRule } from './rules/death-timing';
-// import { WeaponPerformanceRule } from './rules/weapon-performance';
+import { SessionComparisonRule } from './rules/session-comparison';
+import { TrendDetectionRule } from './rules/trend-detection';
+import { LegendRecommendationRule } from './rules/legend-recommendation';
+import { DeathTimingRule } from './rules/death-timing';
+import { WeaponPerformanceRule } from './rules/weapon-performance';
 
 export class CoachingEngine {
   private db: Database.Database;
@@ -42,12 +41,11 @@ export class CoachingEngine {
   }
 
   private registerRules(): void {
-    // TODO: Instantiate and register rule modules
-    // this.rules.push(new SessionComparisonRule());
-    // this.rules.push(new TrendDetectionRule());
-    // this.rules.push(new LegendRecommendationRule());
-    // this.rules.push(new DeathTimingRule());
-    // this.rules.push(new WeaponPerformanceRule());
+    this.rules.push(new SessionComparisonRule());
+    this.rules.push(new TrendDetectionRule());
+    this.rules.push(new LegendRecommendationRule());
+    this.rules.push(new DeathTimingRule());
+    this.rules.push(new WeaponPerformanceRule());
 
     console.log(`[Coaching] ${this.rules.length} rules registered`);
   }

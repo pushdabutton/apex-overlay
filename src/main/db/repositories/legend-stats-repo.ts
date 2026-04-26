@@ -1,10 +1,32 @@
 // ============================================================
 // Legend Stats Repository -- Aggregated per-legend performance
+// Includes row mapper for snake_case -> camelCase conversion.
 // ============================================================
 
 import type Database from 'better-sqlite3';
 import type { LegendStats } from '../../../shared/types';
 import { nowISO } from '../../../shared/utils';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mapLegendStatsRow(row: any): LegendStats {
+  return {
+    legend: row.legend,
+    gamesPlayed: row.games_played ?? 0,
+    totalKills: row.total_kills ?? 0,
+    totalDeaths: row.total_deaths ?? 0,
+    totalAssists: row.total_assists ?? 0,
+    totalDamage: row.total_damage ?? 0,
+    totalHeadshots: row.total_headshots ?? 0,
+    totalWins: row.total_wins ?? 0,
+    avgDamage: row.avg_damage ?? 0,
+    avgKills: row.avg_kills ?? 0,
+    avgPlacement: row.avg_placement ?? null,
+    bestDamage: row.best_damage ?? 0,
+    bestKills: row.best_kills ?? 0,
+    winRate: row.win_rate ?? 0,
+    lastPlayed: row.last_played ?? null,
+  };
+}
 
 export class LegendStatsRepository {
   private db: Database.Database;
@@ -14,15 +36,17 @@ export class LegendStatsRepository {
   }
 
   findAll(): LegendStats[] {
-    return this.db.prepare(
+    const rows = this.db.prepare(
       'SELECT * FROM legend_stats ORDER BY games_played DESC',
-    ).all() as LegendStats[];
+    ).all();
+    return rows.map(mapLegendStatsRow);
   }
 
   findByLegend(legend: string): LegendStats | undefined {
-    return this.db.prepare(
+    const row = this.db.prepare(
       'SELECT * FROM legend_stats WHERE legend = ?',
-    ).get(legend) as LegendStats | undefined;
+    ).get(legend);
+    return row ? mapLegendStatsRow(row) : undefined;
   }
 
   /**

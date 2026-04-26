@@ -1,10 +1,29 @@
 // ============================================================
 // Session Repository -- Data access for the sessions table
+// Includes row mapper for snake_case -> camelCase conversion.
 // ============================================================
 
 import type Database from 'better-sqlite3';
 import type { Session } from '../../../shared/types';
 import { nowISO } from '../../../shared/utils';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mapSessionRow(row: any): Session {
+  return {
+    id: row.id,
+    startedAt: row.started_at,
+    endedAt: row.ended_at ?? null,
+    matchesPlayed: row.matches_played ?? 0,
+    totalKills: row.total_kills ?? 0,
+    totalDeaths: row.total_deaths ?? 0,
+    totalAssists: row.total_assists ?? 0,
+    totalDamage: row.total_damage ?? 0,
+    totalHeadshots: row.total_headshots ?? 0,
+    avgPlacement: row.avg_placement ?? null,
+    bestPlacement: row.best_placement ?? null,
+    totalRpChange: row.total_rp_change ?? 0,
+  };
+}
 
 export class SessionRepository {
   private db: Database.Database;
@@ -14,19 +33,22 @@ export class SessionRepository {
   }
 
   findById(id: number): Session | undefined {
-    return this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Session | undefined;
+    const row = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id);
+    return row ? mapSessionRow(row) : undefined;
   }
 
   findRecent(limit: number = 10): Session[] {
-    return this.db.prepare(
+    const rows = this.db.prepare(
       'SELECT * FROM sessions ORDER BY started_at DESC LIMIT ?',
-    ).all(limit) as Session[];
+    ).all(limit);
+    return rows.map(mapSessionRow);
   }
 
   findActive(): Session | undefined {
-    return this.db.prepare(
+    const row = this.db.prepare(
       'SELECT * FROM sessions WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1',
-    ).get() as Session | undefined;
+    ).get();
+    return row ? mapSessionRow(row) : undefined;
   }
 
   create(): number {
