@@ -19,6 +19,7 @@ import { SessionRepository } from './db/repositories/session-repo';
 import { LegendStatsRepository } from './db/repositories/legend-stats-repo';
 import { DailyAggregateRepository } from './db/repositories/daily-aggregate-repo';
 import { IPC } from '../shared/ipc-channels';
+import { CoachingRepository } from './db/repositories/coaching-repo';
 import type { DomainEvent, Match } from '../shared/types';
 import { nowISO } from '../shared/utils';
 
@@ -49,6 +50,11 @@ async function bootstrap(): Promise<void> {
   // 4. Create API client and scheduler
   const apiClient = new MozambiqueClient(db);
   apiScheduler = new ApiScheduler(apiClient, db);
+
+  // 4a. Startup cleanup tasks -- prune stale data to prevent unbounded growth
+  const coachingRepo = new CoachingRepository(db);
+  coachingRepo.pruneOldDismissed(30);   // Clean up insights dismissed > 30 days ago
+  apiClient.pruneOldProfiles(30);        // Clean up player profiles older than 30 days
 
   // 5. Create overlay windows
   await createWindows();

@@ -65,21 +65,54 @@ export class SessionRepository {
   }
 
   updateAggregates(sessionId: number): void {
+    // Single-pass aggregation: one scan of matches instead of 9 subqueries
+    const agg = this.db.prepare(`
+      SELECT
+        COUNT(*) as matches_played,
+        COALESCE(SUM(kills), 0) as total_kills,
+        COALESCE(SUM(deaths), 0) as total_deaths,
+        COALESCE(SUM(assists), 0) as total_assists,
+        COALESCE(SUM(damage), 0) as total_damage,
+        COALESCE(SUM(headshots), 0) as total_headshots,
+        AVG(CASE WHEN placement IS NOT NULL THEN placement END) as avg_placement,
+        MIN(CASE WHEN placement IS NOT NULL THEN placement END) as best_placement,
+        COALESCE(SUM(CASE WHEN rp_change IS NOT NULL THEN rp_change ELSE 0 END), 0) as total_rp_change
+      FROM matches WHERE session_id = ?
+    `).get(sessionId) as {
+      matches_played: number;
+      total_kills: number;
+      total_deaths: number;
+      total_assists: number;
+      total_damage: number;
+      total_headshots: number;
+      avg_placement: number | null;
+      best_placement: number | null;
+      total_rp_change: number;
+    };
+
     this.db.prepare(`
       UPDATE sessions SET
-        matches_played = (SELECT COUNT(*) FROM matches WHERE session_id = ?),
-        total_kills = (SELECT COALESCE(SUM(kills), 0) FROM matches WHERE session_id = ?),
-        total_deaths = (SELECT COALESCE(SUM(deaths), 0) FROM matches WHERE session_id = ?),
-        total_assists = (SELECT COALESCE(SUM(assists), 0) FROM matches WHERE session_id = ?),
-        total_damage = (SELECT COALESCE(SUM(damage), 0) FROM matches WHERE session_id = ?),
-        total_headshots = (SELECT COALESCE(SUM(headshots), 0) FROM matches WHERE session_id = ?),
-        avg_placement = (SELECT AVG(placement) FROM matches WHERE session_id = ? AND placement IS NOT NULL),
-        best_placement = (SELECT MIN(placement) FROM matches WHERE session_id = ? AND placement IS NOT NULL),
-        total_rp_change = (SELECT COALESCE(SUM(rp_change), 0) FROM matches WHERE session_id = ? AND rp_change IS NOT NULL)
+        matches_played = ?,
+        total_kills = ?,
+        total_deaths = ?,
+        total_assists = ?,
+        total_damage = ?,
+        total_headshots = ?,
+        avg_placement = ?,
+        best_placement = ?,
+        total_rp_change = ?
       WHERE id = ?
     `).run(
-      sessionId, sessionId, sessionId, sessionId, sessionId,
-      sessionId, sessionId, sessionId, sessionId, sessionId,
+      agg.matches_played,
+      agg.total_kills,
+      agg.total_deaths,
+      agg.total_assists,
+      agg.total_damage,
+      agg.total_headshots,
+      agg.avg_placement,
+      agg.best_placement,
+      agg.total_rp_change,
+      sessionId,
     );
   }
 }

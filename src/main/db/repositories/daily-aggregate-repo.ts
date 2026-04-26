@@ -32,9 +32,17 @@ export class DailyAggregateRepository {
    * Queries all matches whose started_at falls on that date
    * and UPSERTs the result into daily_aggregates.
    *
+   * Uses a range query (started_at >= dayStart AND started_at < nextDayStart)
+   * instead of date(started_at) = ? so the idx_matches_started index is used.
+   *
    * @param date ISO date string (YYYY-MM-DD), e.g. '2026-04-26'
    */
   recalculateForDate(date: string): void {
+    // Compute day boundaries for index-friendly range query
+    const dayStart = `${date}T00:00:00`;
+    const nextDay = this.nextDate(date);
+    const dayEnd = `${nextDay}T00:00:00`;
+
     this.db.prepare(`
       INSERT INTO daily_aggregates (
         date, games_played, total_kills, total_deaths, total_damage,
@@ -51,7 +59,7 @@ export class DailyAggregateRepository {
         COALESCE(SUM(rp_change), 0),
         datetime('now')
       FROM matches
-      WHERE date(started_at) = ?
+      WHERE started_at >= ? AND started_at < ?
       ON CONFLICT(date) DO UPDATE SET
         games_played = excluded.games_played,
         total_kills = excluded.total_kills,
@@ -61,7 +69,16 @@ export class DailyAggregateRepository {
         avg_placement = excluded.avg_placement,
         total_rp_change = excluded.total_rp_change,
         updated_at = excluded.updated_at
-    `).run(date, date);
+    `).run(date, dayStart, dayEnd);
+  }
+
+  /**
+   * Returns the next calendar date as YYYY-MM-DD.
+   */
+  private nextDate(date: string): string {
+    const d = new Date(date + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().slice(0, 10);
   }
 
   /**

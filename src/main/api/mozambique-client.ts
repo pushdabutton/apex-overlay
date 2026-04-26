@@ -7,6 +7,7 @@ import type Database from 'better-sqlite3';
 import type { MapRotation, CraftingItem, PlayerProfile } from '../../shared/types';
 
 const BASE_URL = 'https://api.mozambiquehe.re';
+const FETCH_TIMEOUT_MS = 10_000;
 
 interface CacheEntry<T> {
   data: T;
@@ -56,7 +57,7 @@ export class MozambiqueClient {
 
     try {
       const url = `${BASE_URL}/bridge?player=${encodeURIComponent(playerName)}&platform=${platform}&auth=${this.apiKey}`;
-      const response = await fetch(url);
+      const response = await this.fetchWithTimeout(url);
 
       if (!response.ok) {
         console.error(`[API] Player profile fetch failed: ${response.status}`);
@@ -78,10 +79,19 @@ export class MozambiqueClient {
       // Cache in memory
       this.setCache(cacheKey, profile, 5 * 60 * 1000);
 
-      // Cache in SQLite for offline access
+      // UPSERT into SQLite for offline access -- keeps only the latest
+      // profile per (platform, player_uid) to prevent unbounded growth.
       this.db.prepare(`
         INSERT INTO player_profile (platform, player_name, player_uid, level, rank_name, rank_score, rank_division, data_json, fetched_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(platform, player_uid) DO UPDATE SET
+          player_name = excluded.player_name,
+          level = excluded.level,
+          rank_name = excluded.rank_name,
+          rank_score = excluded.rank_score,
+          rank_division = excluded.rank_division,
+          data_json = excluded.data_json,
+          fetched_at = excluded.fetched_at
       `).run(
         profile.platform,
         profile.playerName,
@@ -112,7 +122,7 @@ export class MozambiqueClient {
 
     try {
       const url = `${BASE_URL}/maprotation?version=2&auth=${this.apiKey}`;
-      const response = await fetch(url);
+      const response = await this.fetchWithTimeout(url);
 
       if (!response.ok) {
         console.error(`[API] Map rotation fetch failed: ${response.status}`);
@@ -153,7 +163,7 @@ export class MozambiqueClient {
 
     try {
       const url = `${BASE_URL}/crafting?auth=${this.apiKey}`;
-      const response = await fetch(url);
+      const response = await this.fetchWithTimeout(url);
 
       if (!response.ok) {
         console.error(`[API] Crafting fetch failed: ${response.status}`);
@@ -186,6 +196,38 @@ export class MozambiqueClient {
     } catch (error) {
       console.error('[API] Crafting fetch error:', error);
       return null;
+    }
+  }
+
+  /**
+   * Delete player_profile rows older than the given number of days.
+   * Keeps the latest profile per player (UPSERT handles that),
+   * but this cleans up any stale rows from before the UPSERT fix.
+   */
+  pruneOldProfiles(daysOld: number = 30): number {
+    try {
+      const result = this.db.prepare(
+        `DELETE FROM player_profile WHERE fetched_at < datetime('now', '-' || ? || ' days')`,
+      ).run(daysOld);
+      return result.changes;
+    } catch {
+      return 0;
+    }
+  }
+
+  // --- Network helpers ---
+
+  /**
+   * fetch() wrapper with an AbortController timeout (default 10s).
+   * Prevents hung requests from blocking the event loop.
+   */
+  private async fetchWithTimeout(url: string, timeoutMs: number = FETCH_TIMEOUT_MS): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
