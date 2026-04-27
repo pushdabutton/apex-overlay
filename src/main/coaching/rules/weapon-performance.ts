@@ -35,12 +35,14 @@ export class WeaponPerformanceRule implements CoachingRule {
   evaluatePostMatch(_matchId: number, _sessionId: number, ctx: RuleContext): RuleResult[] {
     const results: RuleResult[] = [];
 
-    // Query weapon kills aggregated across recent matches from the weapon_kills table
+    // Query weapon kills aggregated across last 20 matches (not all historical data)
     const kills = ctx.query<WeaponKillRow>(
-      `SELECT weapon, SUM(kills) as kill_count
-       FROM weapon_kills
-       WHERE weapon IS NOT NULL AND weapon != ''
-       GROUP BY weapon
+      `SELECT wk.weapon, SUM(wk.kills) as kill_count
+       FROM weapon_kills wk
+       INNER JOIN matches m ON wk.match_id = m.id
+       WHERE wk.weapon IS NOT NULL AND wk.weapon != ''
+         AND m.id IN (SELECT id FROM matches ORDER BY started_at DESC LIMIT 20)
+       GROUP BY wk.weapon
        ORDER BY kill_count DESC`,
     );
 

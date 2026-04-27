@@ -22,6 +22,10 @@ export enum InsightType {
   ACHIEVEMENT = 'achievement',
   RANKED_MILESTONE = 'ranked_milestone',
   WARM_UP_PATTERN = 'warm_up_pattern',
+  DAMAGE_PER_KILL = 'damage_per_kill',
+  KNOCK_CONVERSION = 'knock_conversion',
+  TILT_WARNING = 'tilt_warning',
+  WIN_STREAK = 'win_streak',
 }
 
 export enum InsightSeverity {

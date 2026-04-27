@@ -232,6 +232,13 @@ export class EventProcessor extends EventEmitter {
       case 'DAMAGE_DEALT':
         this.currentMatch.damage += event.amount;
         this.session.damage += event.amount;
+
+        // Accumulate weapon damage for DB persistence at MATCH_END
+        if (event.weapon && event.weapon !== 'Unknown') {
+          const existing = this.weaponKills.get(event.weapon) ?? { kills: 0, headshots: 0, damage: 0 };
+          existing.damage += event.amount;
+          this.weaponKills.set(event.weapon, existing);
+        }
         break;
 
       case 'PLAYER_KNOCKDOWN':

@@ -38,6 +38,10 @@ const TYPE_ICONS: Record<string, string> = {
   ranked_milestone: '\u{1F3C6}',      // trophy
   achievement: '\u{2B50}',            // star
   placement_pattern: '\u{1F5FA}',     // map
+  damage_per_kill: '\u{1F3AF}',      // dart/target
+  knock_conversion: '\u{1F4AA}',     // flexed bicep
+  tilt_warning: '\u{1F622}',         // crying face
+  win_streak: '\u{1F525}',           // fire
 };
 
 export const InsightList = memo(function InsightList({
