@@ -190,4 +190,75 @@ describe('EventProcessor', () => {
     expect(batch[1].type).toBe('PLAYER_KILL');
     expect(batch[2].type).toBe('DAMAGE_DEALT');
   });
+
+  // -----------------------------------------------------------------------
+  // Weapon Damage Tracking (Bug Fix)
+  // DAMAGE_DEALT events should accumulate damage into weaponKills map
+  // -----------------------------------------------------------------------
+
+  it('should accumulate weapon damage from DAMAGE_DEALT events into weaponKills map', () => {
+    processor.processRawEvent('match_start', JSON.stringify({ mode: 'battle_royale' }));
+
+    // Deal damage with R-301 (no kill yet)
+    processor.processRawEvent('damage', JSON.stringify({
+      damageAmount: '87',
+      targetName: 'Player1',
+      weapon: 'R-301',
+    }));
+    processor.processRawEvent('damage', JSON.stringify({
+      damageAmount: '63',
+      targetName: 'Player1',
+      weapon: 'R-301',
+    }));
+
+    // Deal damage with Peacekeeper
+    processor.processRawEvent('damage', JSON.stringify({
+      damageAmount: '110',
+      targetName: 'Player2',
+      weapon: 'Peacekeeper',
+    }));
+
+    const weaponKills = processor.getWeaponKills();
+    const r301 = weaponKills.find((w) => w.weapon === 'R-301');
+    const pk = weaponKills.find((w) => w.weapon === 'Peacekeeper');
+
+    // Damage should be accumulated even without kills
+    expect(r301).toBeDefined();
+    expect(r301!.damage).toBe(150);
+    expect(r301!.kills).toBe(0);
+
+    expect(pk).toBeDefined();
+    expect(pk!.damage).toBe(110);
+    expect(pk!.kills).toBe(0);
+  });
+
+  it('should have non-zero weapon damage after processing both kill and damage events', () => {
+    processor.processRawEvent('match_start', JSON.stringify({ mode: 'battle_royale' }));
+
+    // Damage events first
+    processor.processRawEvent('damage', JSON.stringify({
+      damageAmount: '100',
+      targetName: 'Player1',
+      weapon: 'R-301',
+    }));
+    processor.processRawEvent('damage', JSON.stringify({
+      damageAmount: '50',
+      targetName: 'Player1',
+      weapon: 'R-301',
+    }));
+
+    // Then the kill
+    processor.processRawEvent('kill', JSON.stringify({
+      victimName: 'Player1',
+      weapon: 'R-301',
+      headshot: false,
+    }));
+
+    const weaponKills = processor.getWeaponKills();
+    const r301 = weaponKills.find((w) => w.weapon === 'R-301');
+
+    expect(r301).toBeDefined();
+    expect(r301!.kills).toBe(1);
+    expect(r301!.damage).toBe(150); // damage MUST be tracked, not 0
+  });
 });

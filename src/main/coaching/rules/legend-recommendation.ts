@@ -1,6 +1,7 @@
 // ============================================================
-// Legend Recommendation Rule
-// Suggests better-performing legends based on player's history
+// Legend Recommendation Rule (Enhanced)
+// Suggests better-performing legends, celebrates mains,
+// discovers underplayed gems, and nudges single-legend players.
 // ============================================================
 
 import type { CoachingRule, RuleContext, RuleResult } from '../types';
@@ -38,7 +39,35 @@ export class LegendRecommendationRule implements CoachingRule {
       COACHING_THRESHOLDS.MIN_GAMES_FOR_LEGEND_COMPARE,
     );
 
+    // Also get underplayed legends (fewer than threshold games but at least 3)
+    const underplayed = ctx.query<LegendRow>(
+      `SELECT legend, games_played, avg_kills, avg_damage, win_rate
+       FROM legend_stats
+       WHERE games_played < ? AND games_played >= 3
+       ORDER BY win_rate DESC`,
+      COACHING_THRESHOLDS.UNDERPLAYED_LEGEND_MAX_GAMES,
+    );
+
+    // Handle single-legend players: only 1 legend with enough data
+    if (legends.length <= 1) {
+      if (legends.length === 1) {
+        results.push({
+          type: InsightType.LEGEND_RECOMMENDATION,
+          ruleId: this.id,
+          message: `You've played ${legends[0].games_played} games exclusively on ${legends[0].legend}. Try branching out -- you might discover a legend that fits even better!`,
+          severity: InsightSeverity.SUGGESTION,
+          data: { currentLegend: match.legend, singleLegend: true, gamesPlayed: legends[0].games_played },
+        });
+      }
+
+      // Check for underplayed gems even for single-legend players
+      this.checkUnderplayedGems(results, underplayed, match.legend);
+      return results;
+    }
+
     if (legends.length < COACHING_THRESHOLDS.MIN_LEGENDS_FOR_COMPARISON) {
+      // Not enough legends for full comparison -- still check underplayed
+      this.checkUnderplayedGems(results, underplayed, match.legend);
       return results;
     }
 
@@ -46,16 +75,26 @@ export class LegendRecommendationRule implements CoachingRule {
     const currentStats = legends.find((l) => l.legend === match.legend);
     const bestStats = legends[0];
 
-    if (!currentStats || !bestStats) return results;
+    if (!currentStats || !bestStats) {
+      this.checkUnderplayedGems(results, underplayed, match.legend);
+      return results;
+    }
+
     if (currentStats.legend === bestStats.legend) {
       // Player is already on their best legend
+      const secondBest = legends[1];
+      const advantage = secondBest
+        ? Math.round(((currentStats.avg_kills - secondBest.avg_kills) / Math.max(secondBest.avg_kills, 1)) * 100)
+        : 0;
       results.push({
         type: InsightType.LEGEND_RECOMMENDATION,
         ruleId: this.id,
-        message: `You're on your best-performing legend (${bestStats.legend}). Great choice!`,
+        message: `You're on your main -- you average ${advantage > 0 ? `${advantage}% more kills` : 'the most kills'} on ${bestStats.legend}. Great choice!`,
         severity: InsightSeverity.ACHIEVEMENT,
-        data: { currentLegend: match.legend, bestLegend: bestStats.legend },
+        data: { currentLegend: match.legend, bestLegend: bestStats.legend, advantage },
       });
+
+      this.checkUnderplayedGems(results, underplayed, match.legend);
       return results;
     }
 
@@ -81,6 +120,35 @@ export class LegendRecommendationRule implements CoachingRule {
       });
     }
 
+    this.checkUnderplayedGems(results, underplayed, match.legend);
     return results;
+  }
+
+  /**
+   * Check for underplayed legends with surprisingly good stats.
+   */
+  private checkUnderplayedGems(
+    results: RuleResult[],
+    underplayed: LegendRow[],
+    currentLegend: string,
+  ): void {
+    for (const legend of underplayed) {
+      if (legend.legend === currentLegend) continue;
+      if (legend.win_rate >= COACHING_THRESHOLDS.UNDERPLAYED_LEGEND_MIN_WIN_RATE) {
+        results.push({
+          type: InsightType.LEGEND_RECOMMENDATION,
+          ruleId: this.id,
+          message: `You've only played ${legend.games_played} games on ${legend.legend} but your win rate is ${Math.round(legend.win_rate * 100)}%. Worth exploring more!`,
+          severity: InsightSeverity.SUGGESTION,
+          data: {
+            legend: legend.legend,
+            gamesPlayed: legend.games_played,
+            winRate: legend.win_rate,
+            underplayed: true,
+          },
+        });
+        break; // Only suggest one underplayed legend per evaluation
+      }
+    }
   }
 }

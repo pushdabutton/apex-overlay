@@ -10,14 +10,22 @@ export type GamePhase = 'lobby' | 'legend_select' | 'playing' | 'post_match';
 
 export enum InsightType {
   SESSION_VS_AVERAGE = 'session_vs_average',
+  SESSION_VS_AVERAGE_KILLS = 'session_vs_average_kills',
+  SESSION_VS_AVERAGE_DAMAGE = 'session_vs_average_damage',
   TREND_IMPROVING = 'trend_improving',
   TREND_DECLINING = 'trend_declining',
+  TREND_PLATEAU = 'trend_plateau',
   LEGEND_RECOMMENDATION = 'legend_recommendation',
   DEATH_TIMING = 'death_timing',
   WEAPON_PERFORMANCE = 'weapon_performance',
   PLACEMENT_PATTERN = 'placement_pattern',
   ACHIEVEMENT = 'achievement',
   RANKED_MILESTONE = 'ranked_milestone',
+  WARM_UP_PATTERN = 'warm_up_pattern',
+  DAMAGE_PER_KILL = 'damage_per_kill',
+  KNOCK_CONVERSION = 'knock_conversion',
+  TILT_WARNING = 'tilt_warning',
+  WIN_STREAK = 'win_streak',
 }
 
 export enum InsightSeverity {

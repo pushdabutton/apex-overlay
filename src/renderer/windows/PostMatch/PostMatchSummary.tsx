@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { StatCard } from '../../components/StatCard';
-import { InsightCard } from '../../components/InsightCard';
+import { InsightList } from '../../components/InsightList';
 import { useMatchStore } from '../../stores/match-store';
 import { useSessionStore } from '../../stores/session-store';
 import { formatCompact } from '../../../shared/utils';
@@ -8,7 +8,7 @@ import { formatCompact } from '../../../shared/utils';
 /**
  * Post-match summary showing:
  * - Placement, kills, deaths, assists, damage, legend
- * - Coaching insights if available
+ * - Coaching insights (max 3, sorted by severity, with icons)
  * - Comparison to personal averages
  */
 export const PostMatchSummary = memo(function PostMatchSummary() {
@@ -53,17 +53,18 @@ export const PostMatchSummary = memo(function PostMatchSummary() {
         </div>
       )}
 
-      {/* Coaching insights */}
+      {/* Coaching insights -- max 3, severity-sorted, with icons */}
       {coachingInsights.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          {coachingInsights.map((insight) => (
-            <InsightCard
-              key={insight.id}
-              message={insight.message}
-              severity={insight.severity as 'info' | 'warning' | 'suggestion' | 'achievement'}
-            />
-          ))}
-        </div>
+        <InsightList
+          insights={coachingInsights.map((insight) => ({
+            id: insight.id,
+            message: insight.message,
+            severity: insight.severity as 'info' | 'warning' | 'suggestion' | 'achievement',
+            type: insight.type,
+            ruleId: insight.ruleId,
+          }))}
+          maxVisible={3}
+        />
       )}
     </div>
   );

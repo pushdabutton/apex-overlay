@@ -37,6 +37,9 @@ export const LEGENDS = [
 export type LegendName = (typeof LEGENDS)[number];
 
 // Rank tiers and RP thresholds
+// NOTE: Ranked RP thresholds are approximate and may change each season.
+// Last verified: Season 20 (2025). Check Apex patch notes for updates.
+// The mozambiquehe.re API /predator endpoint has live threshold data.
 export const RANK_TIERS = [
   { name: 'Rookie', divisions: 4, rpPerDivision: 250, color: '#808080' },
   { name: 'Bronze', divisions: 4, rpPerDivision: 300, color: '#cd7f32' },
@@ -72,10 +75,22 @@ export const API_POLL_INTERVALS = {
 export const COACHING_THRESHOLDS = {
   SIGNIFICANT_POSITIVE_DELTA: 0.15,   // +15%
   SIGNIFICANT_NEGATIVE_DELTA: -0.15,  // -15%
+  HOT_STREAK_DELTA: 0.30,            // +30% for hot streak
+  COLD_STREAK_DELTA: -0.30,          // -30% for cold streak
   NEUTRAL_BAND: 0.05,                 // +/- 5%
   MIN_GAMES_FOR_LEGEND_COMPARE: 5,
   MIN_LEGENDS_FOR_COMPARISON: 3,
   MIN_DEATHS_FOR_TIMING: 10,
   TREND_SESSIONS_REQUIRED: 3,
+  TREND_PLATEAU_BAND: 0.08,          // +/- 8% considered stable
   LEGEND_PERFORMANCE_GAP: 0.20,       // 20% gap triggers suggestion
+  LEGEND_SWITCH_KD_GAP: 0.25,        // 25% K/D gap triggers switch suggestion
+  UNDERPLAYED_LEGEND_MAX_GAMES: 10,   // "underplayed" if fewer than this
+  UNDERPLAYED_LEGEND_MIN_WIN_RATE: 0.20, // good win rate for underplayed
+  WEAPON_MIN_KILLS: 5,               // minimum kills with a weapon for analysis
+  WARMUP_MIN_SESSIONS: 5,            // sessions needed for warm-up detection
+  WARMUP_MIN_MATCHES_PER_SESSION: 3, // matches per session for warm-up data
+  WARMUP_GAMES_TO_CHECK: 2,          // first N games considered "warm-up"
+  WARMUP_DEFICIT_THRESHOLD: 0.30,    // 30% less damage = warm-up pattern
+  RANKED_DEMOTION_WARNING_RP: 120,   // warn when within this RP of demotion (~2-3 bad games buffer)
 } as const;

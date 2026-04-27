@@ -11,16 +11,30 @@ import { InsightType, InsightSeverity } from '../../src/shared/types';
 
 function createMockContext(
   matchLegend: string | undefined,
-  legendStats: Array<{
+  mainLegends: Array<{
     legend: string;
     games_played: number;
     avg_kills: number;
     avg_damage: number;
     win_rate: number;
   }>,
+  underplayedLegends: Array<{
+    legend: string;
+    games_played: number;
+    avg_kills: number;
+    avg_damage: number;
+    win_rate: number;
+  }> = [],
 ): RuleContext {
   return {
-    query: vi.fn(() => legendStats),
+    query: vi.fn((sql: string) => {
+      if (sql.includes('games_played <') || sql.includes('< ?')) {
+        // Underplayed legends query (games_played < threshold AND games_played >= 3)
+        return underplayedLegends;
+      }
+      // Main legends query (games_played >= threshold)
+      return mainLegends;
+    }),
     queryOne: vi.fn(() => (matchLegend ? { legend: matchLegend } : undefined)),
   };
 }
@@ -54,7 +68,7 @@ describe('LegendRecommendationRule', () => {
 
     const achievement = results.find(r => r.severity === InsightSeverity.ACHIEVEMENT);
     expect(achievement).toBeDefined();
-    expect(achievement!.message).toContain('best-performing');
+    expect(achievement!.message).toMatch(/best|main/);
   });
 
   it('should require 5+ games per legend before comparing', () => {

@@ -22,6 +22,13 @@ export interface SessionStats {
   matchesPlayed: number;
 }
 
+export interface WeaponKillEntry {
+  weapon: string;
+  kills: number;
+  headshots: number;
+  damage: number;
+}
+
 export interface MatchStats {
   kills: number;
   deaths: number;
@@ -69,6 +76,9 @@ export class EventProcessor extends EventEmitter {
   private inMatch = false;
   private pendingBatch: DomainEvent[] = [];
   private batchCallbacks: BatchCallback[] = [];
+
+  // Weapon kill accumulator: weapon -> { kills, headshots, damage }
+  private weaponKills = new Map<string, { kills: number; headshots: number; damage: number }>();
 
   /**
    * Process a single raw GEP event by name and data string.
@@ -139,6 +149,18 @@ export class EventProcessor extends EventEmitter {
   }
 
   /**
+   * Get weapon kill data accumulated during the current match.
+   * Returns an array of { weapon, kills, headshots, damage } entries.
+   */
+  getWeaponKills(): WeaponKillEntry[] {
+    const entries: WeaponKillEntry[] = [];
+    for (const [weapon, stats] of this.weaponKills) {
+      entries.push({ weapon, kills: stats.kills, headshots: stats.headshots, damage: stats.damage });
+    }
+    return entries;
+  }
+
+  /**
    * Register a callback for batched event delivery.
    */
   onBatch(callback: BatchCallback): void {
@@ -168,6 +190,7 @@ export class EventProcessor extends EventEmitter {
       case 'MATCH_START':
         this.matchStartTime = event.timestamp;
         this.currentMatch = emptyMatchStats();
+        this.weaponKills.clear();
         this.inMatch = true;
         break;
 
@@ -179,13 +202,22 @@ export class EventProcessor extends EventEmitter {
         this.matchStartTime = 0;
         break;
 
-      case 'PLAYER_KILL':
+      case 'PLAYER_KILL': {
         this.currentMatch.kills++;
         if (event.headshot) this.currentMatch.headshots++;
         // Also accumulate into live session total
         this.session.kills++;
         if (event.headshot) this.session.headshots++;
+
+        // Accumulate weapon kill data for DB persistence at MATCH_END
+        if (event.weapon) {
+          const existing = this.weaponKills.get(event.weapon) ?? { kills: 0, headshots: 0, damage: 0 };
+          existing.kills++;
+          if (event.headshot) existing.headshots++;
+          this.weaponKills.set(event.weapon, existing);
+        }
         break;
+      }
 
       case 'PLAYER_DEATH':
         this.currentMatch.deaths++;
@@ -200,6 +232,13 @@ export class EventProcessor extends EventEmitter {
       case 'DAMAGE_DEALT':
         this.currentMatch.damage += event.amount;
         this.session.damage += event.amount;
+
+        // Accumulate weapon damage for DB persistence at MATCH_END
+        if (event.weapon && event.weapon !== 'Unknown') {
+          const existing = this.weaponKills.get(event.weapon) ?? { kills: 0, headshots: 0, damage: 0 };
+          existing.damage += event.amount;
+          this.weaponKills.set(event.weapon, existing);
+        }
         break;
 
       case 'PLAYER_KNOCKDOWN':
