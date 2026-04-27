@@ -5,7 +5,7 @@
 import Database from 'better-sqlite3';
 import { app } from 'electron';
 import { join } from 'path';
-import { readFileSync, readdirSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 
 let db: Database.Database;
 
@@ -38,15 +38,23 @@ function runMigrations(database: Database.Database): void {
     );
   `);
 
-  // Read migration files
-  const migrationsDir = join(__dirname, 'migrations');
+  // Read migration files -- try the build output first (out/main/migrations),
+  // then fall back to the source directory for dev-mode resilience.
+  let migrationsDir = join(__dirname, 'migrations');
+  if (!existsSync(migrationsDir)) {
+    // Fallback: resolve from source tree (works when running via electron-vite dev)
+    const srcFallback = join(__dirname, '..', '..', 'src', 'main', 'db', 'migrations');
+    if (existsSync(srcFallback)) {
+      migrationsDir = srcFallback;
+    }
+  }
+
   let files: string[];
   try {
     files = readdirSync(migrationsDir)
       .filter((f) => f.endsWith('.sql'))
       .sort();
   } catch {
-    // Migrations directory might not exist in dev
     console.warn('No migrations directory found at', migrationsDir);
     return;
   }

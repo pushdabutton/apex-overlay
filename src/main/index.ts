@@ -6,6 +6,14 @@
 // ============================================================
 
 import { app, BrowserWindow } from 'electron';
+
+// GPU fallback for Linux/WSL where hardware GPU may not be available.
+// Must be set before app.whenReady().
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('disable-gpu');
+  app.commandLine.appendSwitch('use-gl', 'swiftshader');
+}
+
 import { createWindows, broadcastToAll, showWindow } from './windows';
 import { registerIpcHandlers } from './ipc-handlers';
 import { GEPManager } from './gep/gep-manager';
@@ -54,9 +62,15 @@ async function bootstrap(): Promise<void> {
   apiScheduler = new ApiScheduler(apiClient, db);
 
   // 4a. Startup cleanup tasks -- prune stale data to prevent unbounded growth
-  const coachingRepo = new CoachingRepository(db);
-  coachingRepo.pruneOldDismissed(30);   // Clean up insights dismissed > 30 days ago
-  apiClient.pruneOldProfiles(30);        // Clean up player profiles older than 30 days
+  //     Wrapped in try-catch: these are non-critical and must not crash bootstrap
+  //     if the DB tables haven't been fully set up yet.
+  try {
+    const coachingRepo = new CoachingRepository(db);
+    coachingRepo.pruneOldDismissed(30);   // Clean up insights dismissed > 30 days ago
+    apiClient.pruneOldProfiles(30);        // Clean up player profiles older than 30 days
+  } catch (err) {
+    console.warn('[apex-coach] Startup cleanup skipped:', err);
+  }
 
   // 5. Create overlay windows
   await createWindows();
@@ -238,7 +252,10 @@ function handleDomainEvent(
 }
 
 // App lifecycle
-app.whenReady().then(bootstrap);
+app.whenReady().then(bootstrap).catch((err) => {
+  console.error('[apex-coach] Fatal: bootstrap failed:', err);
+  app.quit();
+});
 
 app.on('window-all-closed', () => {
   gepManager?.destroy();
