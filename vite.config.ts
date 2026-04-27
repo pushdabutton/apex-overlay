@@ -19,7 +19,7 @@ export default defineConfig({
   preload: {
     build: {
       lib: {
-        entry: resolve(__dirname, 'src/main/preload.ts'),
+        entry: resolve(__dirname, 'src/preload/index.ts'),
       },
     },
   },

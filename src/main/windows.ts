@@ -21,7 +21,7 @@ const WINDOW_CONFIGS: Record<WindowName, Electron.BrowserWindowConstructorOption
     resizable: true,
     skipTaskbar: true,
     webPreferences: {
-      preload: join(__dirname, 'preload.js'),
+      preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -35,7 +35,7 @@ const WINDOW_CONFIGS: Record<WindowName, Electron.BrowserWindowConstructorOption
     resizable: true,
     show: false,
     webPreferences: {
-      preload: join(__dirname, 'preload.js'),
+      preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -48,7 +48,7 @@ const WINDOW_CONFIGS: Record<WindowName, Electron.BrowserWindowConstructorOption
     resizable: true,
     show: false,
     webPreferences: {
-      preload: join(__dirname, 'preload.js'),
+      preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -61,7 +61,7 @@ const WINDOW_CONFIGS: Record<WindowName, Electron.BrowserWindowConstructorOption
     resizable: false,
     show: false,
     webPreferences: {
-      preload: join(__dirname, 'preload.js'),
+      preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
