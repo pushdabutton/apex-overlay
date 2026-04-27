@@ -1,24 +1,128 @@
 // ============================================================
-// Weapon Performance Rule (Stub)
-// Analyzes accuracy and weapon selection patterns
-// NOTE: Depends on weapon-specific GEP data which may be limited
+// Weapon Performance Rule
+// Analyzes kill-feed weapon data to identify top weapons,
+// underperforming weapons, and meta weapon alignment.
+// Uses PLAYER_KILL event weapon field stored in matches.
 // ============================================================
 
 import type { CoachingRule, RuleContext, RuleResult } from '../types';
+import { InsightType, InsightSeverity } from '../../../shared/types';
+import { COACHING_THRESHOLDS } from '../../../shared/constants';
+
+interface WeaponKillRow {
+  weapon: string;
+  kill_count: number;
+}
+
+// Weapons that are consistently strong in the meta
+const META_WEAPONS = new Set([
+  'R-301',
+  'Flatline',
+  'Peacekeeper',
+  'Wingman',
+  'Volt',
+  'R-99',
+  'Mastiff',
+  'Nemesis',
+  'Hemlok',
+]);
 
 export class WeaponPerformanceRule implements CoachingRule {
   id = 'weapon-performance';
   name = 'Weapon Performance Analysis';
 
-  evaluatePostMatch(_matchId: number, _sessionId: number, _ctx: RuleContext): RuleResult[] {
-    // TODO: Implement when weapon-specific GEP data is confirmed available
-    // This rule requires:
-    // - Per-weapon kill tracking
-    // - Per-weapon accuracy (shots hit/fired by weapon)
-    // - Weapon category classification
-    //
-    // These may not be available through standard GEP events.
-    // Phase 2 implementation after GEP data audit.
-    return [];
+  evaluatePostMatch(_matchId: number, _sessionId: number, ctx: RuleContext): RuleResult[] {
+    const results: RuleResult[] = [];
+
+    // Get weapon kill counts from recent matches (kill events store weapon name)
+    // This queries a weapon_kills tracking table or aggregates from kill events
+    const weaponKills = ctx.query<WeaponKillRow>(
+      `SELECT weapon, COUNT(*) as kill_count
+       FROM (
+         SELECT json_extract(data_json, '$.weapon') as weapon
+         FROM coaching_insights
+         WHERE type = 'weapon_kill_log'
+         UNION ALL
+         SELECT weapon FROM weapon_kills
+       )
+       WHERE weapon IS NOT NULL AND weapon != ''
+       GROUP BY weapon
+       ORDER BY kill_count DESC`,
+    );
+
+    // If the weapon_kills query returns empty, try fallback approach
+    const kills = weaponKills.length > 0 ? weaponKills : ctx.query<WeaponKillRow>(
+      `SELECT weapon, kill_count FROM weapon_kills ORDER BY kill_count DESC`,
+    );
+
+    // Calculate total kills
+    const totalKills = kills.reduce((sum, w) => sum + w.kill_count, 0);
+
+    // Need minimum kills for meaningful analysis
+    if (totalKills < COACHING_THRESHOLDS.WEAPON_MIN_KILLS) {
+      return results;
+    }
+
+    // Top weapon analysis
+    if (kills.length > 0) {
+      const topWeapon = kills[0];
+      const topPct = Math.round((topWeapon.kill_count / totalKills) * 100);
+
+      if (topPct >= 20) {
+        const isMetaWeapon = META_WEAPONS.has(topWeapon.weapon);
+
+        results.push({
+          type: InsightType.WEAPON_PERFORMANCE,
+          ruleId: this.id,
+          message: `${topWeapon.weapon} accounts for ${topPct}% of your kills (${topWeapon.kill_count} of ${totalKills}). ${isMetaWeapon ? "It's strong in the current meta -- lean into it!" : 'You know this weapon well.'}`,
+          severity: InsightSeverity.INFO,
+          data: {
+            topWeapon: true,
+            weapon: topWeapon.weapon,
+            killCount: topWeapon.kill_count,
+            totalKills,
+            pct: topPct,
+          },
+        });
+
+        // Meta alignment callout for top weapon
+        if (isMetaWeapon) {
+          results.push({
+            type: InsightType.WEAPON_PERFORMANCE,
+            ruleId: this.id,
+            message: `The ${topWeapon.weapon} is strong this season and it's your best weapon -- you're well-aligned with the meta!`,
+            severity: InsightSeverity.ACHIEVEMENT,
+            data: { metaAligned: true, weapon: topWeapon.weapon, pct: topPct },
+          });
+        }
+      }
+    }
+
+    // Underperforming weapon analysis
+    // A weapon that has kills but disproportionately low percentage
+    if (kills.length >= 3) {
+      const avgPct = 100 / kills.length;
+      for (const weapon of kills) {
+        const weaponPct = (weapon.kill_count / totalKills) * 100;
+        // Underperforming: has enough kills to show up but gets less than 40% of average share
+        if (weaponPct < avgPct * 0.4 && weapon.kill_count >= 3) {
+          results.push({
+            type: InsightType.WEAPON_PERFORMANCE,
+            ruleId: this.id,
+            message: `You pick up the ${weapon.weapon} but only get ${Math.round(weaponPct)}% of your kills with it (${weapon.kill_count} kills). Consider swapping to weapons you perform better with.`,
+            severity: InsightSeverity.SUGGESTION,
+            data: {
+              underperforming: true,
+              weapon: weapon.weapon,
+              killCount: weapon.kill_count,
+              pct: Math.round(weaponPct),
+            },
+          });
+          break; // Only one underperforming callout
+        }
+      }
+    }
+
+    return results;
   }
 }

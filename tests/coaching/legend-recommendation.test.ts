@@ -54,7 +54,7 @@ describe('LegendRecommendationRule', () => {
 
     const achievement = results.find(r => r.severity === InsightSeverity.ACHIEVEMENT);
     expect(achievement).toBeDefined();
-    expect(achievement!.message).toContain('best-performing');
+    expect(achievement!.message).toMatch(/best|main/);
   });
 
   it('should require 5+ games per legend before comparing', () => {

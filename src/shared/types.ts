@@ -12,12 +12,14 @@ export enum InsightType {
   SESSION_VS_AVERAGE = 'session_vs_average',
   TREND_IMPROVING = 'trend_improving',
   TREND_DECLINING = 'trend_declining',
+  TREND_PLATEAU = 'trend_plateau',
   LEGEND_RECOMMENDATION = 'legend_recommendation',
   DEATH_TIMING = 'death_timing',
   WEAPON_PERFORMANCE = 'weapon_performance',
   PLACEMENT_PATTERN = 'placement_pattern',
   ACHIEVEMENT = 'achievement',
   RANKED_MILESTONE = 'ranked_milestone',
+  WARM_UP_PATTERN = 'warm_up_pattern',
 }
 
 export enum InsightSeverity {

@@ -15,6 +15,8 @@ import { TrendDetectionRule } from './rules/trend-detection';
 import { LegendRecommendationRule } from './rules/legend-recommendation';
 import { DeathTimingRule } from './rules/death-timing';
 import { WeaponPerformanceRule } from './rules/weapon-performance';
+import { WarmUpDetectionRule } from './rules/warmup-detection';
+import { RankedProgressRule } from './rules/ranked-progress';
 
 export class CoachingEngine {
   private db: Database.Database;
@@ -49,6 +51,8 @@ export class CoachingEngine {
     this.rules.push(new LegendRecommendationRule());
     this.rules.push(new DeathTimingRule());
     this.rules.push(new WeaponPerformanceRule());
+    this.rules.push(new WarmUpDetectionRule());
+    this.rules.push(new RankedProgressRule());
 
     console.log(`[Coaching] ${this.rules.length} rules registered`);
   }
