@@ -18,8 +18,8 @@ export default defineConfig({
   },
   preload: {
     build: {
-      rollupOptions: {
-        input: resolve(__dirname, 'src/main/preload.ts'),
+      lib: {
+        entry: resolve(__dirname, 'src/main/preload.ts'),
       },
     },
   },
