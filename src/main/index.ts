@@ -18,6 +18,7 @@ import { MatchRepository } from './db/repositories/match-repo';
 import { SessionRepository } from './db/repositories/session-repo';
 import { LegendStatsRepository } from './db/repositories/legend-stats-repo';
 import { DailyAggregateRepository } from './db/repositories/daily-aggregate-repo';
+import { WeaponKillRepository } from './db/repositories/weapon-kill-repo';
 import { IPC } from '../shared/ipc-channels';
 import { CoachingRepository } from './db/repositories/coaching-repo';
 import type { DomainEvent, Match } from '../shared/types';
@@ -46,6 +47,7 @@ async function bootstrap(): Promise<void> {
   const sessionRepo = new SessionRepository(db);
   const legendStatsRepo = new LegendStatsRepository(db);
   const dailyAggregateRepo = new DailyAggregateRepository(db);
+  const weaponKillRepo = new WeaponKillRepository(db);
 
   // 4. Create API client and scheduler
   const apiClient = new MozambiqueClient(db);
@@ -68,7 +70,7 @@ async function bootstrap(): Promise<void> {
 
   // 8. Wire the domain event pipeline (CRITICAL FIX: was not wired at all)
   gepManager.on('domain-event', (event: DomainEvent) => {
-    handleDomainEvent(event, matchRepo, sessionRepo, legendStatsRepo, dailyAggregateRepo);
+    handleDomainEvent(event, matchRepo, sessionRepo, legendStatsRepo, dailyAggregateRepo, weaponKillRepo);
   });
 
   await gepManager.initialize();
@@ -86,6 +88,7 @@ function handleDomainEvent(
   sessionRepo: SessionRepository,
   legendStatsRepo: LegendStatsRepository,
   dailyAggregateRepo: DailyAggregateRepository,
+  weaponKillRepo: WeaponKillRepository,
 ): void {
   switch (event.type) {
     case 'MATCH_START': {
@@ -136,6 +139,21 @@ function handleDomainEvent(
             startedAt: matchStartedAt,
             endedAt: nowISO(),
           });
+
+          // Persist weapon kills accumulated during the match
+          const weaponKillEntries = gepManager.getProcessor().getWeaponKills();
+          if (weaponKillEntries.length > 0) {
+            weaponKillRepo.bulkCreate(
+              weaponKillEntries.map((entry) => ({
+                matchId: matchId!,
+                sessionId: currentSessionId,
+                weapon: entry.weapon,
+                kills: entry.kills,
+                headshots: entry.headshots,
+                damage: entry.damage,
+              })),
+            );
+          }
 
           // Update session aggregates
           sessionRepo.updateAggregates(currentSessionId);

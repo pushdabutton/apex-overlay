@@ -11,16 +11,30 @@ import { InsightType, InsightSeverity } from '../../src/shared/types';
 
 function createMockContext(
   matchLegend: string | undefined,
-  legendStats: Array<{
+  mainLegends: Array<{
     legend: string;
     games_played: number;
     avg_kills: number;
     avg_damage: number;
     win_rate: number;
   }>,
+  underplayedLegends: Array<{
+    legend: string;
+    games_played: number;
+    avg_kills: number;
+    avg_damage: number;
+    win_rate: number;
+  }> = [],
 ): RuleContext {
   return {
-    query: vi.fn(() => legendStats),
+    query: vi.fn((sql: string) => {
+      if (sql.includes('games_played <') || sql.includes('< ?')) {
+        // Underplayed legends query (games_played < threshold AND games_played >= 3)
+        return underplayedLegends;
+      }
+      // Main legends query (games_played >= threshold)
+      return mainLegends;
+    }),
     queryOne: vi.fn(() => (matchLegend ? { legend: matchLegend } : undefined)),
   };
 }
@@ -61,12 +75,18 @@ describe('LegendRecommendationRule (Enhanced)', () => {
   });
 
   it('should suggest trying underplayed legends with good stats', () => {
-    // Catalyst has only 5 games but 30% win rate
-    const ctx = createMockContext('Wraith', [
+    // Catalyst has only 5 games but 30% win rate -- returned by underplayed query
+    const mainLegends = [
       { legend: 'Wraith', games_played: 100, avg_kills: 3.5, avg_damage: 1000, win_rate: 0.10 },
       { legend: 'Octane', games_played: 50, avg_kills: 3.0, avg_damage: 900, win_rate: 0.08 },
+      { legend: 'Bangalore', games_played: 30, avg_kills: 2.5, avg_damage: 800, win_rate: 0.06 },
+    ];
+
+    const underplayedLegends = [
       { legend: 'Catalyst', games_played: 5, avg_kills: 4.0, avg_damage: 1200, win_rate: 0.30 },
-    ]);
+    ];
+
+    const ctx = createMockContext('Wraith', mainLegends, underplayedLegends);
 
     const results = rule.evaluatePostMatch(1, 1, ctx);
 

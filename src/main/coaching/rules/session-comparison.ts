@@ -3,6 +3,10 @@
 // Compares current session metrics to 7-day rolling averages.
 // Detects hot/cold streaks, provides specific stat callouts
 // with absolute difference, scales severity by magnitude.
+//
+// Uses SESSION_VS_AVERAGE_KILLS and SESSION_VS_AVERAGE_DAMAGE
+// as separate insight types to avoid dedup suppression when
+// both stats are noteworthy in the same session.
 // ============================================================
 
 import type { CoachingRule, RuleContext, RuleResult } from '../types';
@@ -65,7 +69,7 @@ export class SessionComparisonRule implements CoachingRule {
     if (killsDelta >= COACHING_THRESHOLDS.HOT_STREAK_DELTA * 100) {
       // Hot streak: 30%+ above average
       results.push({
-        type: InsightType.SESSION_VS_AVERAGE,
+        type: InsightType.SESSION_VS_AVERAGE_KILLS,
         ruleId: this.id,
         message: `Hot streak! Your kills are ${Math.round(killsDelta)}% above your weekly average (${sessionAvgKills.toFixed(1)} vs ${weekAvg.avg_kills.toFixed(1)} avg). You're on fire!`,
         severity: InsightSeverity.ACHIEVEMENT,
@@ -73,7 +77,7 @@ export class SessionComparisonRule implements CoachingRule {
       });
     } else if (killsDelta > COACHING_THRESHOLDS.SIGNIFICANT_POSITIVE_DELTA * 100) {
       results.push({
-        type: InsightType.SESSION_VS_AVERAGE,
+        type: InsightType.SESSION_VS_AVERAGE_KILLS,
         ruleId: this.id,
         message: `Your kills are ${Math.round(killsDelta)}% above your weekly average. Nice session!`,
         severity: InsightSeverity.ACHIEVEMENT,
@@ -82,7 +86,7 @@ export class SessionComparisonRule implements CoachingRule {
     } else if (killsDelta <= COACHING_THRESHOLDS.COLD_STREAK_DELTA * 100) {
       // Cold streak: 30%+ below average
       results.push({
-        type: InsightType.SESSION_VS_AVERAGE,
+        type: InsightType.SESSION_VS_AVERAGE_KILLS,
         ruleId: this.id,
         message: `Rough session -- your kills are ${Math.round(Math.abs(killsDelta))}% below your weekly average. Consider taking a break or changing your drop strategy.`,
         severity: InsightSeverity.WARNING,
@@ -90,7 +94,7 @@ export class SessionComparisonRule implements CoachingRule {
       });
     } else if (killsDelta < COACHING_THRESHOLDS.SIGNIFICANT_NEGATIVE_DELTA * 100) {
       results.push({
-        type: InsightType.SESSION_VS_AVERAGE,
+        type: InsightType.SESSION_VS_AVERAGE_KILLS,
         ruleId: this.id,
         message: `Your kills dropped ${Math.round(Math.abs(killsDelta))}% vs your weekly average. Consider adjusting your aggression or positioning.`,
         severity: InsightSeverity.WARNING,
@@ -104,7 +108,7 @@ export class SessionComparisonRule implements CoachingRule {
 
     if (damageDelta >= COACHING_THRESHOLDS.HOT_STREAK_DELTA * 100) {
       results.push({
-        type: InsightType.SESSION_VS_AVERAGE,
+        type: InsightType.SESSION_VS_AVERAGE_DAMAGE,
         ruleId: this.id,
         message: `Your damage is ${damageAbsDiff} above your weekly average tonight (${Math.round(sessionAvgDamage)} vs ${Math.round(weekAvg.avg_damage)}). Incredible output!`,
         severity: InsightSeverity.ACHIEVEMENT,
@@ -112,7 +116,7 @@ export class SessionComparisonRule implements CoachingRule {
       });
     } else if (damageDelta > COACHING_THRESHOLDS.SIGNIFICANT_POSITIVE_DELTA * 100) {
       results.push({
-        type: InsightType.SESSION_VS_AVERAGE,
+        type: InsightType.SESSION_VS_AVERAGE_DAMAGE,
         ruleId: this.id,
         message: `Your damage is ${damageAbsDiff} above your weekly average. Great aim today!`,
         severity: InsightSeverity.ACHIEVEMENT,
@@ -120,7 +124,7 @@ export class SessionComparisonRule implements CoachingRule {
       });
     } else if (damageDelta <= COACHING_THRESHOLDS.COLD_STREAK_DELTA * 100) {
       results.push({
-        type: InsightType.SESSION_VS_AVERAGE,
+        type: InsightType.SESSION_VS_AVERAGE_DAMAGE,
         ruleId: this.id,
         message: `Your damage is ${Math.abs(damageAbsDiff)} below your weekly average. Try warming up in the firing range before your next match.`,
         severity: InsightSeverity.WARNING,
@@ -128,7 +132,7 @@ export class SessionComparisonRule implements CoachingRule {
       });
     } else if (damageDelta < COACHING_THRESHOLDS.SIGNIFICANT_NEGATIVE_DELTA * 100) {
       results.push({
-        type: InsightType.SESSION_VS_AVERAGE,
+        type: InsightType.SESSION_VS_AVERAGE_DAMAGE,
         ruleId: this.id,
         message: `Your damage dropped ${Math.round(Math.abs(damageDelta))}% vs your weekly average. Try warming up in the firing range.`,
         severity: InsightSeverity.SUGGESTION,

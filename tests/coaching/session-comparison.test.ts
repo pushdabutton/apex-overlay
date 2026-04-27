@@ -36,7 +36,7 @@ describe('SessionComparisonRule', () => {
     const killsInsight = results.find(r => r.data && (r.data as Record<string, unknown>).metric === 'kills');
     expect(killsInsight).toBeDefined();
     expect(killsInsight!.severity).toBe(InsightSeverity.ACHIEVEMENT);
-    expect(killsInsight!.type).toBe(InsightType.SESSION_VS_AVERAGE);
+    expect(killsInsight!.type).toBe(InsightType.SESSION_VS_AVERAGE_KILLS);
   });
 
   it('should emit warning when kills are 15%+ below weekly average', () => {

@@ -10,6 +10,8 @@ export type GamePhase = 'lobby' | 'legend_select' | 'playing' | 'post_match';
 
 export enum InsightType {
   SESSION_VS_AVERAGE = 'session_vs_average',
+  SESSION_VS_AVERAGE_KILLS = 'session_vs_average_kills',
+  SESSION_VS_AVERAGE_DAMAGE = 'session_vs_average_damage',
   TREND_IMPROVING = 'trend_improving',
   TREND_DECLINING = 'trend_declining',
   TREND_PLATEAU = 'trend_plateau',

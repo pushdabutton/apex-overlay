@@ -25,7 +25,9 @@ const SEVERITY_ORDER: Record<string, number> = {
 
 // Type-to-icon mapping
 const TYPE_ICONS: Record<string, string> = {
-  session_vs_average: '\u{1F525}',   // fire
+  session_vs_average: '\u{1F525}',        // fire (legacy)
+  session_vs_average_kills: '\u{1F525}',  // fire
+  session_vs_average_damage: '\u{1F4A5}', // collision/damage
   trend_improving: '\u{1F4C8}',      // chart up
   trend_declining: '\u{1F4C9}',      // chart down
   trend_plateau: '\u{2796}',         // minus

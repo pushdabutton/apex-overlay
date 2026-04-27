@@ -18,7 +18,8 @@ export class DeathTimingRule implements CoachingRule {
   evaluateSession(sessionId: number, ctx: RuleContext): RuleResult[] {
     const results: RuleResult[] = [];
 
-    // Get death timing data from recent matches where player died
+    // Intentionally queries across all recent sessions (not just current)
+    // to detect persistent patterns in early/mid/late game deaths.
     const deaths = ctx.query<DeathTimingRow>(
       `SELECT survival_time FROM matches
        WHERE deaths > 0 AND survival_time > 0

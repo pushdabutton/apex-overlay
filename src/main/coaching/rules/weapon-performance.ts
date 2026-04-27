@@ -2,7 +2,8 @@
 // Weapon Performance Rule
 // Analyzes kill-feed weapon data to identify top weapons,
 // underperforming weapons, and meta weapon alignment.
-// Uses PLAYER_KILL event weapon field stored in matches.
+// Queries the weapon_kills table populated from PLAYER_KILL
+// events at match end.
 // ============================================================
 
 import type { CoachingRule, RuleContext, RuleResult } from '../types';
@@ -34,25 +35,13 @@ export class WeaponPerformanceRule implements CoachingRule {
   evaluatePostMatch(_matchId: number, _sessionId: number, ctx: RuleContext): RuleResult[] {
     const results: RuleResult[] = [];
 
-    // Get weapon kill counts from recent matches (kill events store weapon name)
-    // This queries a weapon_kills tracking table or aggregates from kill events
-    const weaponKills = ctx.query<WeaponKillRow>(
-      `SELECT weapon, COUNT(*) as kill_count
-       FROM (
-         SELECT json_extract(data_json, '$.weapon') as weapon
-         FROM coaching_insights
-         WHERE type = 'weapon_kill_log'
-         UNION ALL
-         SELECT weapon FROM weapon_kills
-       )
+    // Query weapon kills aggregated across recent matches from the weapon_kills table
+    const kills = ctx.query<WeaponKillRow>(
+      `SELECT weapon, SUM(kills) as kill_count
+       FROM weapon_kills
        WHERE weapon IS NOT NULL AND weapon != ''
        GROUP BY weapon
        ORDER BY kill_count DESC`,
-    );
-
-    // If the weapon_kills query returns empty, try fallback approach
-    const kills = weaponKills.length > 0 ? weaponKills : ctx.query<WeaponKillRow>(
-      `SELECT weapon, kill_count FROM weapon_kills ORDER BY kill_count DESC`,
     );
 
     // Calculate total kills
