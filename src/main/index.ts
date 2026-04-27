@@ -72,11 +72,11 @@ async function bootstrap(): Promise<void> {
     console.warn('[apex-coach] Startup cleanup skipped:', err);
   }
 
-  // 5. Create overlay windows
-  await createWindows();
-
-  // 6. Register IPC handlers (renderer <-> main communication)
+  // 5. Register IPC handlers before windows open (renderer calls them immediately)
   registerIpcHandlers(db);
+
+  // 6. Create overlay windows
+  await createWindows();
 
   // 7. Initialize GEP via provider factory (CRITICAL FIX: was passing db, coachingEngine)
   const provider = createGEPProvider();
