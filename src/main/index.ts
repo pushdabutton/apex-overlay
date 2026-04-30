@@ -87,6 +87,33 @@ async function bootstrap(): Promise<void> {
     handleDomainEvent(event, matchRepo, sessionRepo, legendStatsRepo, dailyAggregateRepo, weaponKillRepo);
   });
 
+  // 8a. Wire ow-electron info update events to renderer IPC broadcasts.
+  // These fire from EventProcessor when it receives key-value info updates
+  // from the real ow-electron GEP (tabs, weapons, player name, etc.)
+  const processor = gepManager.getProcessor();
+
+  processor.on('live-stats', (stats: { kills: number; assists: number; damage: number; teams: number; players: number }) => {
+    broadcastToAll(IPC.LIVE_STATS, stats);
+    // Also broadcast as a MATCH_UPDATE so the existing match store picks it up
+    broadcastToAll(IPC.MATCH_UPDATE, { type: 'live-stats', stats });
+  });
+
+  processor.on('weapons-update', (weapons: Record<string, string>) => {
+    broadcastToAll(IPC.WEAPONS_UPDATE, weapons);
+  });
+
+  processor.on('player-name', (name: string) => {
+    broadcastToAll(IPC.PLAYER_NAME, { name });
+  });
+
+  processor.on('game-mode', (mode: { gameMode: string | null; modeName: string | null }) => {
+    broadcastToAll(IPC.GAME_MODE, mode);
+  });
+
+  processor.on('location-update', (location: { x: number; y: number; z: number }) => {
+    broadcastToAll(IPC.PLAYER_LOCATION, location);
+  });
+
   await gepManager.initialize();
 
   // 9. Start API polling

@@ -9,6 +9,14 @@
 //     .on('new-game-event', (e, gameId, ...args) => ...)
 //     .on('new-info-update', (e, gameId, ...args) => ...)
 //     .on('game-detected', (e, gameId, name, info) => { e.enable(); })
+//
+// CRITICAL: ow-electron sends individual key-value info updates,
+// NOT nested objects. Each update arrives as:
+//   { gameId, feature, category, key, value }
+// where `value` is often a JSON string that needs parsing.
+//
+// We transform each update into the format EventProcessor expects:
+//   { info: { [key]: parsedValue } }
 // ============================================================
 
 import type { GEPProvider } from './gep-manager';
@@ -20,13 +28,20 @@ import { APEX_GAME_ID } from '../../shared/constants';
  * at build time, but we define the shape we actually use here
  * so the adapter compiles standalone.
  */
+
+/** Shape of a game event from ow-electron GEP */
 interface OwGepGameEvent {
   name: string;
   data: string;
 }
 
+/** Real shape of info updates from ow-electron GEP -- individual key-value pairs */
 interface OwGepInfoUpdate {
-  info: Record<string, unknown>;
+  gameId: number;
+  feature: string;
+  category: string;
+  key: string;
+  value: string;
 }
 
 interface OwGepDetectedEvent {
@@ -39,6 +54,24 @@ interface OwGepPackage {
   on(event: 'new-info-update', handler: (e: unknown, gameId: number, info: OwGepInfoUpdate) => void): void;
   on(event: 'game-detected', handler: (e: OwGepDetectedEvent, gameId: number, name: string, info: unknown) => void): void;
   removeListener(event: string, handler: (...args: unknown[]) => void): void;
+}
+
+/**
+ * Try to parse a string as JSON. If it fails or the input is not
+ * a string, return the original value unchanged.
+ */
+function tryParseJson(value: string): unknown {
+  if (typeof value !== 'string') return value;
+  // Quick check: if it doesn't look like JSON, skip parsing
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[') && !trimmed.startsWith('"')) {
+    return value;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
 }
 
 /**
@@ -96,6 +129,7 @@ export class OwElectronGEPAdapter {
           const handler = (_e: unknown, gameId: number, event: OwGepGameEvent): void => {
             // Only forward events for Apex Legends
             if (gameId === APEX_GAME_ID) {
+              console.log('[ow-electron GEP] Game event:', event.name, event.data?.slice?.(0, 200));
               callback({ events: [{ name: event.name, data: event.data }] });
             }
           };
@@ -114,13 +148,31 @@ export class OwElectronGEPAdapter {
       onInfoUpdates2: {
         addListener: (callback: (payload: { info: Record<string, unknown> }) => void) => {
           const handler = (_e: unknown, gameId: number, info: unknown): void => {
-            if (gameId === APEX_GAME_ID) {
-              // Log the raw info shape to understand ow-electron's format
-              console.log('[ow-electron GEP] Raw info update:', JSON.stringify(info).slice(0, 500));
-              // Try multiple possible data shapes
-              const infoObj = (typeof info === 'object' && info !== null)
-                ? ((info as Record<string, unknown>).info as Record<string, unknown>) ?? (info as Record<string, unknown>)
-                : {};
+            if (gameId !== APEX_GAME_ID) return;
+
+            console.log('[ow-electron GEP] Raw info update:', JSON.stringify(info).slice(0, 500));
+
+            // ow-electron GEP sends individual key-value updates:
+            //   { gameId, feature, category, key, value }
+            // where value is often a JSON string that needs parsing.
+            //
+            // We transform this into: { info: { key: parsedValue } }
+            // which is the format EventProcessor.processInfoUpdate expects.
+            const update = info as OwGepInfoUpdate;
+            if (update && typeof update.key === 'string' && update.value !== undefined) {
+              const parsedValue = tryParseJson(update.value);
+              callback({
+                info: {
+                  key: update.key,
+                  value: parsedValue,
+                  feature: update.feature,
+                  category: update.category,
+                },
+              });
+            } else if (typeof info === 'object' && info !== null) {
+              // Fallback for unexpected formats -- pass through as-is
+              const infoObj = (info as Record<string, unknown>).info as Record<string, unknown>
+                ?? (info as Record<string, unknown>);
               callback({ info: infoObj });
             }
           };

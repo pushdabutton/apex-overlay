@@ -107,14 +107,65 @@ export class EventProcessor extends EventEmitter {
     }
   }
 
+  // --- Player state tracked from info updates ---
+  private playerName: string | null = null;
+  private gameMode: string | null = null;
+  private modeName: string | null = null;
+  private equippedWeapons: Record<string, string> = {};
+  private playerLocation: { x: number; y: number; z: number } | null = null;
+
+  /**
+   * Get the player name detected from GEP info updates.
+   */
+  getPlayerName(): string | null {
+    return this.playerName;
+  }
+
+  /**
+   * Get the current game mode info detected from GEP info updates.
+   */
+  getGameMode(): { gameMode: string | null; modeName: string | null } {
+    return { gameMode: this.gameMode, modeName: this.modeName };
+  }
+
+  /**
+   * Get the currently equipped weapons detected from GEP info updates.
+   */
+  getEquippedWeapons(): Record<string, string> {
+    return { ...this.equippedWeapons };
+  }
+
+  /**
+   * Get the latest player location from GEP info updates.
+   */
+  getPlayerLocation(): { x: number; y: number; z: number } | null {
+    return this.playerLocation ? { ...this.playerLocation } : null;
+  }
+
   /**
    * Process GEP info updates (some data arrives as info, not events).
+   *
+   * Handles two formats:
+   *
+   * 1. ow-electron key-value format (real GEP):
+   *    { info: { key: "tabs", value: { kills: 2, ... }, feature: "match_info", category: "match_info" } }
+   *
+   * 2. Legacy / MockGEP nested object format:
+   *    { info: { legendName: "Wraith", phase: "playing" } }
    */
   processInfoUpdate(payload: { info: Record<string, unknown> }): void {
     const info = payload?.info;
     if (!info || typeof info !== 'object') return;
 
-    // ow-electron may nest legend info under 'me' category
+    // ow-electron key-value format: { key, value, feature, category }
+    if (typeof info.key === 'string' && info.value !== undefined) {
+      this.processKeyValueUpdate(info.key, info.value, info.feature as string | undefined);
+      return;
+    }
+
+    // --- Legacy / MockGEP nested object format (backward compatible) ---
+
+    // Legend selection
     const legendName = (info.legendName as string)
       ?? ((info.me as Record<string, unknown>)?.legendName as string)
       ?? ((info.me as Record<string, unknown>)?.legend as string);
@@ -122,13 +173,14 @@ export class EventProcessor extends EventEmitter {
     if (legendName && typeof legendName === 'string') {
       const event: DomainEvent = {
         type: 'LEGEND_SELECTED',
-        legend: info.legendName,
+        legend: legendName,
         timestamp: Date.now(),
       };
       this.pendingBatch.push(event);
       this.emit('domain-event', event);
     }
 
+    // Phase changes
     if (info.phase && typeof info.phase === 'string') {
       const event = mapGepEvent('phase', JSON.stringify({ phase: info.phase }), {
         matchStartTime: this.matchStartTime,
@@ -138,6 +190,162 @@ export class EventProcessor extends EventEmitter {
         this.emit('domain-event', event);
       }
     }
+  }
+
+  /**
+   * Handle a single key-value info update from ow-electron GEP.
+   *
+   * Known keys:
+   *   - "tabs"       -> live match stats { kills, assists, teams, players, damage }
+   *   - "name"       -> player name (string)
+   *   - "phase"      -> game phase: "lobby" | "select" | "playing" | "summary"
+   *   - "weapons"    -> equipped weapons { weapon0, weapon1 }
+   *   - "game_mode"  -> internal game mode string (e.g., "#PL_TITLE_UNHINGED")
+   *   - "mode_name"  -> human-readable mode name (e.g., "Wildcard")
+   *   - "location"   -> player position { x, y, z }
+   *   - "player"     -> player info { player_name, in_game_player_name }
+   *   - "legendName" -> selected legend name
+   */
+  private processKeyValueUpdate(key: string, value: unknown, feature?: string): void {
+    switch (key) {
+      case 'tabs': {
+        // Live match stats from match_info feature
+        // value: { kills, assists, teams, players, damage, cash }
+        const tabs = typeof value === 'object' && value !== null
+          ? (value as Record<string, unknown>)
+          : {};
+        const kills = this.safeInt(tabs.kills);
+        const assists = this.safeInt(tabs.assists);
+        const damage = this.safeInt(tabs.damage);
+        const teams = this.safeInt(tabs.teams);
+        const players = this.safeInt(tabs.players);
+
+        // Emit a live stats update event so the UI can react
+        this.emit('live-stats', { kills, assists, damage, teams, players });
+
+        // Update current match stats from the authoritative game data.
+        // GEP tabs gives us cumulative totals for the current match,
+        // so we set them directly rather than incrementing.
+        if (this.inMatch) {
+          this.currentMatch.kills = kills;
+          this.currentMatch.assists = assists;
+          this.currentMatch.damage = damage;
+        }
+        break;
+      }
+
+      case 'name': {
+        // Player name -- simple string value
+        if (typeof value === 'string' && value.length > 0) {
+          this.playerName = value;
+          this.emit('player-name', value);
+        }
+        break;
+      }
+
+      case 'player': {
+        // Player info object: { player_name, in_game_player_name }
+        if (typeof value === 'object' && value !== null) {
+          const playerObj = value as Record<string, unknown>;
+          const name = (playerObj.player_name as string) ?? (playerObj.in_game_player_name as string);
+          if (name && typeof name === 'string') {
+            this.playerName = name;
+            this.emit('player-name', name);
+          }
+        }
+        break;
+      }
+
+      case 'phase': {
+        // Game phase transition
+        if (typeof value === 'string') {
+          const event = mapGepEvent('phase', JSON.stringify({ phase: value }), {
+            matchStartTime: this.matchStartTime,
+          });
+          if (event) {
+            this.pendingBatch.push(event);
+            this.emit('domain-event', event);
+          }
+        }
+        break;
+      }
+
+      case 'weapons': {
+        // Equipped weapons: { weapon0: "R-301 Carbine", weapon1: "Alternator SMG" }
+        if (typeof value === 'object' && value !== null) {
+          this.equippedWeapons = {};
+          const weapons = value as Record<string, unknown>;
+          for (const [slot, weaponName] of Object.entries(weapons)) {
+            if (typeof weaponName === 'string' && weaponName.length > 0) {
+              this.equippedWeapons[slot] = weaponName;
+            }
+          }
+          this.emit('weapons-update', { ...this.equippedWeapons });
+        }
+        break;
+      }
+
+      case 'game_mode': {
+        // Internal game mode identifier (e.g., "#PL_TITLE_UNHINGED")
+        if (typeof value === 'string') {
+          this.gameMode = value;
+          this.emit('game-mode', { gameMode: this.gameMode, modeName: this.modeName });
+        }
+        break;
+      }
+
+      case 'mode_name': {
+        // Human-readable mode name (e.g., "Wildcard")
+        if (typeof value === 'string') {
+          this.modeName = value;
+          this.emit('game-mode', { gameMode: this.gameMode, modeName: this.modeName });
+        }
+        break;
+      }
+
+      case 'location': {
+        // Player position: { x: "-132", y: "63", z: "28" }
+        if (typeof value === 'object' && value !== null) {
+          const loc = value as Record<string, unknown>;
+          this.playerLocation = {
+            x: parseFloat(String(loc.x ?? '0')),
+            y: parseFloat(String(loc.y ?? '0')),
+            z: parseFloat(String(loc.z ?? '0')),
+          };
+          this.emit('location-update', this.playerLocation);
+        }
+        break;
+      }
+
+      case 'legendName':
+      case 'legend': {
+        // Legend selected (may come via me feature)
+        if (typeof value === 'string' && value.length > 0) {
+          const event: DomainEvent = {
+            type: 'LEGEND_SELECTED',
+            legend: value,
+            timestamp: Date.now(),
+          };
+          this.pendingBatch.push(event);
+          this.emit('domain-event', event);
+        }
+        break;
+      }
+
+      default:
+        // Log unknown keys for debugging during development
+        console.log(`[EventProcessor] Unhandled info key: "${key}" (feature: ${feature ?? 'unknown'})`);
+        break;
+    }
+  }
+
+  /**
+   * Safely parse a value to integer, returning 0 for null/undefined/NaN.
+   */
+  private safeInt(val: unknown): number {
+    if (val === null || val === undefined) return 0;
+    const n = typeof val === 'number' ? val : parseInt(String(val), 10);
+    return isNaN(n) ? 0 : n;
   }
 
   /**

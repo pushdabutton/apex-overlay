@@ -261,4 +261,234 @@ describe('EventProcessor', () => {
     expect(r301!.kills).toBe(1);
     expect(r301!.damage).toBe(150); // damage MUST be tracked, not 0
   });
+
+  // -----------------------------------------------------------------------
+  // ow-electron Key-Value Info Update Format
+  // Real GEP sends: { key: "tabs", value: { kills: 2, ... }, feature: "match_info", category: "match_info" }
+  // -----------------------------------------------------------------------
+
+  describe('ow-electron key-value info updates', () => {
+    it('should update match stats from "tabs" key-value update', () => {
+      processor.processRawEvent('match_start', JSON.stringify({ mode: 'battle_royale' }));
+
+      // Simulate ow-electron tabs update (cumulative match stats from the game)
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: 3, assists: 1, teams: 7, players: 19, damage: 887, cash: null },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      const match = processor.getCurrentMatchStats();
+      expect(match.kills).toBe(3);
+      expect(match.assists).toBe(1);
+      expect(match.damage).toBe(887);
+    });
+
+    it('should emit live-stats event from "tabs" update', () => {
+      const liveStats = vi.fn();
+      processor.on('live-stats', liveStats);
+
+      processor.processRawEvent('match_start', JSON.stringify({ mode: 'battle_royale' }));
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: 2, assists: 0, teams: 7, players: 19, damage: 500, cash: null },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      expect(liveStats).toHaveBeenCalledWith({
+        kills: 2,
+        assists: 0,
+        damage: 500,
+        teams: 7,
+        players: 19,
+      });
+    });
+
+    it('should set player name from "name" key-value update', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'name',
+          value: 'ipushdabutton',
+          feature: 'me',
+          category: 'me',
+        },
+      });
+
+      expect(processor.getPlayerName()).toBe('ipushdabutton');
+    });
+
+    it('should set player name from "player" key-value update', () => {
+      const nameCallback = vi.fn();
+      processor.on('player-name', nameCallback);
+
+      processor.processInfoUpdate({
+        info: {
+          key: 'player',
+          value: { player_name: 'ipushdabutton', in_game_player_name: 'ipushdabutton' },
+          feature: 'game_info',
+          category: 'game_info',
+        },
+      });
+
+      expect(processor.getPlayerName()).toBe('ipushdabutton');
+      expect(nameCallback).toHaveBeenCalledWith('ipushdabutton');
+    });
+
+    it('should emit GAME_PHASE event from "phase" key-value update', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'phase',
+          value: 'lobby',
+          feature: 'game_info',
+          category: 'game_info',
+        },
+      });
+
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0].type).toBe('GAME_PHASE');
+      if (emittedEvents[0].type === 'GAME_PHASE') {
+        expect(emittedEvents[0].phase).toBe('lobby');
+      }
+    });
+
+    it('should track equipped weapons from "weapons" key-value update', () => {
+      const weaponsCallback = vi.fn();
+      processor.on('weapons-update', weaponsCallback);
+
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon0: 'R-301 Carbine', weapon1: 'Alternator SMG' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      expect(processor.getEquippedWeapons()).toEqual({
+        weapon0: 'R-301 Carbine',
+        weapon1: 'Alternator SMG',
+      });
+      expect(weaponsCallback).toHaveBeenCalledWith({
+        weapon0: 'R-301 Carbine',
+        weapon1: 'Alternator SMG',
+      });
+    });
+
+    it('should track game mode from "game_mode" and "mode_name" updates', () => {
+      const modeCallback = vi.fn();
+      processor.on('game-mode', modeCallback);
+
+      processor.processInfoUpdate({
+        info: {
+          key: 'game_mode',
+          value: '#PL_TITLE_UNHINGED',
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      processor.processInfoUpdate({
+        info: {
+          key: 'mode_name',
+          value: 'Wildcard',
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      const mode = processor.getGameMode();
+      expect(mode.gameMode).toBe('#PL_TITLE_UNHINGED');
+      expect(mode.modeName).toBe('Wildcard');
+      expect(modeCallback).toHaveBeenCalledTimes(2);
+    });
+
+    it('should track player location from "location" key-value update', () => {
+      const locationCallback = vi.fn();
+      processor.on('location-update', locationCallback);
+
+      processor.processInfoUpdate({
+        info: {
+          key: 'location',
+          value: { x: '-132', y: '63', z: '28' },
+          feature: 'location',
+          category: 'match_info',
+        },
+      });
+
+      const location = processor.getPlayerLocation();
+      expect(location).toEqual({ x: -132, y: 63, z: 28 });
+      expect(locationCallback).toHaveBeenCalledWith({ x: -132, y: 63, z: 28 });
+    });
+
+    it('should emit LEGEND_SELECTED from "legendName" key-value update', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'legendName',
+          value: 'Wraith',
+          feature: 'me',
+          category: 'me',
+        },
+      });
+
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0].type).toBe('LEGEND_SELECTED');
+      if (emittedEvents[0].type === 'LEGEND_SELECTED') {
+        expect(emittedEvents[0].legend).toBe('Wraith');
+      }
+    });
+
+    it('should still handle legacy nested object format (backward compat)', () => {
+      // MockGEP sends this format directly
+      processor.processInfoUpdate({
+        info: {
+          legendName: 'Octane',
+          phase: 'playing',
+        },
+      });
+
+      // Should have both LEGEND_SELECTED and GAME_PHASE events
+      expect(emittedEvents).toHaveLength(2);
+      expect(emittedEvents[0].type).toBe('LEGEND_SELECTED');
+      expect(emittedEvents[1].type).toBe('GAME_PHASE');
+    });
+
+    it('should not crash on unknown keys', () => {
+      // Unknown keys should be logged but not throw
+      processor.processInfoUpdate({
+        info: {
+          key: 'some_unknown_key',
+          value: 'some_value',
+          feature: 'unknown',
+          category: 'unknown',
+        },
+      });
+
+      expect(emittedEvents).toHaveLength(0);
+    });
+
+    it('should handle tabs with string number values', () => {
+      processor.processRawEvent('match_start', JSON.stringify({ mode: 'battle_royale' }));
+
+      // Sometimes GEP sends numbers as strings
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: '5', assists: '2', damage: '1200', teams: '3', players: '8' },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      const match = processor.getCurrentMatchStats();
+      expect(match.kills).toBe(5);
+      expect(match.assists).toBe(2);
+      expect(match.damage).toBe(1200);
+    });
+  });
 });
