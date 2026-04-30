@@ -8,7 +8,7 @@
 
 import { EventEmitter } from 'events';
 import { mapGepEvent } from './event-map';
-import type { DomainEvent } from '../../shared/types';
+import type { DomainEvent, GameMode } from '../../shared/types';
 
 export interface SessionStats {
   kills: number;
@@ -263,14 +263,51 @@ export class EventProcessor extends EventEmitter {
       }
 
       case 'phase': {
-        // Game phase transition
+        // Game phase transition -- also synthesize MATCH_START / MATCH_END
+        // from phase changes because ow-electron GEP does NOT send explicit
+        // match_start / match_end game events. Instead it sends phase updates:
+        //   "lobby" | "select" | "playing" | "summary"
         if (typeof value === 'string') {
-          const event = mapGepEvent('phase', JSON.stringify({ phase: value }), {
+          const newPhase = value.toLowerCase();
+
+          // Detect match start: transitioning TO "playing" from any non-playing state
+          if ((newPhase === 'playing' || newPhase === 'match') && !this.inMatch) {
+            console.log(`[EventProcessor] MATCH DETECTED: phase -> ${newPhase} (starting match)`);
+            const startEvent: DomainEvent = {
+              type: 'MATCH_START',
+              timestamp: Date.now(),
+              mode: this.resolveCurrentMode(),
+            };
+            this.applyToStats(startEvent);
+            this.pendingBatch.push(startEvent);
+            this.emit('domain-event', startEvent);
+          }
+
+          // Detect match end: transitioning FROM "playing" to "lobby" or "summary"
+          if ((newPhase === 'lobby' || newPhase === 'summary' || newPhase === 'post_match') && this.inMatch) {
+            const matchStats = this.currentMatch;
+            console.log(
+              `[EventProcessor] MATCH ENDED: phase -> ${newPhase} (ending match, saving stats)`,
+            );
+            console.log(
+              `[EventProcessor] Match stats: kills=${matchStats.kills}, assists=${matchStats.assists}, damage=${matchStats.damage}`,
+            );
+            const endEvent: DomainEvent = {
+              type: 'MATCH_END',
+              timestamp: Date.now(),
+            };
+            this.applyToStats(endEvent);
+            this.pendingBatch.push(endEvent);
+            this.emit('domain-event', endEvent);
+          }
+
+          // Also emit the GAME_PHASE event for any other listeners (UI, state machine)
+          const phaseEvent = mapGepEvent('phase', JSON.stringify({ phase: value }), {
             matchStartTime: this.matchStartTime,
           });
-          if (event) {
-            this.pendingBatch.push(event);
-            this.emit('domain-event', event);
+          if (phaseEvent) {
+            this.pendingBatch.push(phaseEvent);
+            this.emit('domain-event', phaseEvent);
           }
         }
         break;
@@ -343,6 +380,23 @@ export class EventProcessor extends EventEmitter {
         console.log(`[EventProcessor] Unhandled info key: "${key}" (feature: ${feature ?? 'unknown'})`);
         break;
     }
+  }
+
+  /**
+   * Resolve the current game mode from tracked mode_name / game_mode info.
+   * Falls back to 'unknown' if no mode info has been received yet.
+   */
+  private resolveCurrentMode(): GameMode {
+    const raw = this.modeName ?? this.gameMode;
+    if (!raw) return 'unknown';
+    const lower = raw.toLowerCase();
+    if (lower.includes('ranked')) return 'ranked';
+    if (lower.includes('arena')) return 'arenas';
+    if (lower.includes('ltm') || lower.includes('limited')) return 'ltm';
+    if (lower.includes('battle') || lower.includes('br') || lower.includes('trios') || lower.includes('duos')) {
+      return 'battle_royale';
+    }
+    return 'unknown';
   }
 
   /**
