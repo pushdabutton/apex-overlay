@@ -113,9 +113,15 @@ export class OwElectronGEPAdapter {
 
       onInfoUpdates2: {
         addListener: (callback: (payload: { info: Record<string, unknown> }) => void) => {
-          const handler = (_e: unknown, gameId: number, info: OwGepInfoUpdate): void => {
+          const handler = (_e: unknown, gameId: number, info: unknown): void => {
             if (gameId === APEX_GAME_ID) {
-              callback({ info: info.info });
+              // Log the raw info shape to understand ow-electron's format
+              console.log('[ow-electron GEP] Raw info update:', JSON.stringify(info).slice(0, 500));
+              // Try multiple possible data shapes
+              const infoObj = (typeof info === 'object' && info !== null)
+                ? ((info as Record<string, unknown>).info as Record<string, unknown>) ?? (info as Record<string, unknown>)
+                : {};
+              callback({ info: infoObj });
             }
           };
           this.infoHandlerMap.set(callback, handler);

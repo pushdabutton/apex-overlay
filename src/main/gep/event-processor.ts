@@ -111,9 +111,15 @@ export class EventProcessor extends EventEmitter {
    * Process GEP info updates (some data arrives as info, not events).
    */
   processInfoUpdate(payload: { info: Record<string, unknown> }): void {
-    const info = payload.info;
+    const info = payload?.info;
+    if (!info || typeof info !== 'object') return;
 
-    if (info.legendName && typeof info.legendName === 'string') {
+    // ow-electron may nest legend info under 'me' category
+    const legendName = (info.legendName as string)
+      ?? ((info.me as Record<string, unknown>)?.legendName as string)
+      ?? ((info.me as Record<string, unknown>)?.legend as string);
+
+    if (legendName && typeof legendName === 'string') {
       const event: DomainEvent = {
         type: 'LEGEND_SELECTED',
         legend: info.legendName,
