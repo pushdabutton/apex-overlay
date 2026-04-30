@@ -130,9 +130,14 @@ export const useMatchStore = create<MatchState>((set) => ({
   },
 
   addCoachingInsight: (insight) => {
-    set((state) => ({
-      coachingInsights: [...state.coachingInsights, insight],
-    }));
+    set((state) => {
+      // Deduplicate: skip if we already have an insight with the same ruleId+type
+      const isDupe = state.coachingInsights.some(
+        (existing) => existing.ruleId === insight.ruleId && existing.type === insight.type,
+      );
+      if (isDupe) return state;
+      return { coachingInsights: [...state.coachingInsights, insight] };
+    });
   },
 
   resetMatch: () => {

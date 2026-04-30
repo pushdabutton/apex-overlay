@@ -159,6 +159,8 @@ function handleDomainEvent(
     case 'MATCH_END': {
       if (currentSessionId !== null && matchStartedAt) {
         const matchStats = gepManager.getProcessor().getCurrentMatchStats();
+        console.log('[apex-coach] MATCH_END - matchStats:', JSON.stringify(matchStats));
+        console.log('[apex-coach] MATCH_END - currentLegend:', currentLegend, 'currentMap:', currentMap);
         let matchId: number | null = null;
 
         // Persist match data — wrapped in try/catch so a DB failure

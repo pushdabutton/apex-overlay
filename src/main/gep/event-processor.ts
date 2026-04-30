@@ -216,7 +216,7 @@ export class EventProcessor extends EventEmitter {
     switch (key) {
       case 'tabs': {
         // Live match stats from match_info feature
-        // value: { kills, assists, teams, players, damage, cash }
+        // value: { kills, assists, teams, players, damage, knockdowns, cash, ... }
         const tabs = typeof value === 'object' && value !== null
           ? (value as Record<string, unknown>)
           : {};
@@ -225,6 +225,9 @@ export class EventProcessor extends EventEmitter {
         const damage = this.safeInt(tabs.damage);
         const teams = this.safeInt(tabs.teams);
         const players = this.safeInt(tabs.players);
+        const knockdowns = this.safeInt(tabs.knockdowns);
+
+        console.log(`[EventProcessor] tabs update: kills=${kills} assists=${assists} damage=${damage} knockdowns=${knockdowns}`);
 
         // Emit a live stats update event so the UI can react
         this.emit('live-stats', { kills, assists, damage, teams, players });
@@ -236,6 +239,9 @@ export class EventProcessor extends EventEmitter {
           this.currentMatch.kills = kills;
           this.currentMatch.assists = assists;
           this.currentMatch.damage = damage;
+          if (knockdowns > 0) {
+            this.currentMatch.knockdowns = knockdowns;
+          }
         }
         break;
       }
@@ -369,8 +375,11 @@ export class EventProcessor extends EventEmitter {
       }
 
       case 'legendName':
-      case 'legend': {
-        // Legend selected (may come via me feature)
+      case 'legend':
+      case 'selected_legend':
+      case 'legend_select':
+      case 'character_name': {
+        // Legend selected (may come via me feature with various key names)
         if (typeof value === 'string' && value.length > 0) {
           const event: DomainEvent = {
             type: 'LEGEND_SELECTED',
@@ -379,6 +388,34 @@ export class EventProcessor extends EventEmitter {
           };
           this.pendingBatch.push(event);
           this.emit('domain-event', event);
+        }
+        break;
+      }
+
+      case 'me': {
+        // The "me" feature bundles player info including legend name.
+        // Shape: { name: "...", legendName: "Wraith", ... } or JSON string
+        if (typeof value === 'object' && value !== null) {
+          const me = value as Record<string, unknown>;
+          const legendFromMe = (me.legendName as string)
+            ?? (me.legend as string)
+            ?? (me.selected_legend as string)
+            ?? (me.character_name as string);
+          if (legendFromMe && typeof legendFromMe === 'string' && legendFromMe.length > 0) {
+            const event: DomainEvent = {
+              type: 'LEGEND_SELECTED',
+              legend: legendFromMe,
+              timestamp: Date.now(),
+            };
+            this.pendingBatch.push(event);
+            this.emit('domain-event', event);
+          }
+          // Also extract player name if present
+          const nameFromMe = (me.name as string) ?? (me.player_name as string);
+          if (nameFromMe && typeof nameFromMe === 'string' && nameFromMe.length > 0) {
+            this.playerName = nameFromMe;
+            this.emit('player-name', nameFromMe);
+          }
         }
         break;
       }
@@ -517,12 +554,21 @@ export class EventProcessor extends EventEmitter {
         this.session.kills++;
         if (event.headshot) this.session.headshots++;
 
-        // Accumulate weapon kill data for DB persistence at MATCH_END
-        if (event.weapon) {
-          const existing = this.weaponKills.get(event.weapon) ?? { kills: 0, headshots: 0, damage: 0 };
+        // Accumulate weapon kill data for DB persistence at MATCH_END.
+        // If the kill event didn't include weapon data (or it's 'Unknown'),
+        // fall back to the currently equipped primary weapon from GEP info.
+        let killWeapon = event.weapon;
+        if (!killWeapon || killWeapon === 'Unknown') {
+          killWeapon = this.equippedWeapons['weapon0']
+            ?? this.equippedWeapons['0']
+            ?? Object.values(this.equippedWeapons)[0]
+            ?? 'Unknown';
+        }
+        if (killWeapon && killWeapon !== 'Unknown') {
+          const existing = this.weaponKills.get(killWeapon) ?? { kills: 0, headshots: 0, damage: 0 };
           existing.kills++;
           if (event.headshot) existing.headshots++;
-          this.weaponKills.set(event.weapon, existing);
+          this.weaponKills.set(killWeapon, existing);
         }
         break;
       }

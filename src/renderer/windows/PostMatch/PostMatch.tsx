@@ -13,6 +13,7 @@ function PostMatchInner() {
   // so it must independently listen for IPC broadcasts to populate data.
   useEffect(() => {
     const unsubEnd = window.apexCoach.on(IPC.MATCH_END, (data) => {
+      console.log('[PostMatch] Received MATCH_END:', JSON.stringify(data));
       const payload = data as {
         matchId: number | null;
         sessionId: number | null;
@@ -40,6 +41,7 @@ function PostMatchInner() {
 
     // Listen for coaching insights generated after match end
     const unsubInsight = window.apexCoach.on(IPC.COACHING_INSIGHT, (data) => {
+      console.log('[PostMatch] Received COACHING_INSIGHT:', JSON.stringify(data));
       useMatchStore.getState().addCoachingInsight(data as CoachingInsight);
     });
 
