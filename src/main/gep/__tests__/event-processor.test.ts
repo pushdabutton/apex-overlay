@@ -472,6 +472,63 @@ describe('EventProcessor', () => {
       expect(emittedEvents).toHaveLength(0);
     });
 
+    it('should update damage from "totalDamageDealt" key-value update during match', () => {
+      const liveStats = vi.fn();
+      processor.on('live-stats', liveStats);
+
+      processor.processRawEvent('match_start', JSON.stringify({ mode: 'battle_royale' }));
+
+      // totalDamageDealt arrives as a separate key
+      processor.processInfoUpdate({
+        info: {
+          key: 'totalDamageDealt',
+          value: 1234,
+          feature: 'damage',
+          category: 'me',
+        },
+      });
+
+      const match = processor.getCurrentMatchStats();
+      expect(match.damage).toBe(1234);
+      expect(liveStats).toHaveBeenCalledWith({
+        kills: 0,
+        assists: 0,
+        damage: 1234,
+        teams: 0,
+        players: 0,
+      });
+    });
+
+    it('should ignore "totalDamageDealt" when not in a match', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'totalDamageDealt',
+          value: 500,
+          feature: 'damage',
+          category: 'me',
+        },
+      });
+
+      const match = processor.getCurrentMatchStats();
+      expect(match.damage).toBe(0);
+    });
+
+    it('should parse string "totalDamageDealt" value', () => {
+      processor.processRawEvent('match_start', JSON.stringify({ mode: 'battle_royale' }));
+
+      processor.processInfoUpdate({
+        info: {
+          key: 'totalDamageDealt',
+          value: '987',
+          feature: 'damage',
+          category: 'me',
+        },
+      });
+
+      const match = processor.getCurrentMatchStats();
+      expect(match.damage).toBe(987);
+    });
+
     it('should handle tabs with string number values', () => {
       processor.processRawEvent('match_start', JSON.stringify({ mode: 'battle_royale' }));
 
@@ -758,6 +815,82 @@ describe('EventProcessor', () => {
       const session = processor.getSessionStats();
       expect(session.matchesPlayed).toBe(2);
       expect(session.kills).toBe(3); // 1 from match 1 + 2 from match 2
+    });
+
+    it('should detect match start when phase transitions to "landed"', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'phase',
+          value: 'landed',
+          feature: 'game_info',
+          category: 'game_info',
+        },
+      });
+
+      const matchStart = emittedEvents.find((e) => e.type === 'MATCH_START');
+      expect(matchStart).toBeDefined();
+      expect(matchStart!.type).toBe('MATCH_START');
+    });
+
+    it('should detect match end when phase transitions to "match_summary"', () => {
+      // Start a match via landed phase
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'landed', feature: 'game_info', category: 'game_info' },
+      });
+      emittedEvents.length = 0;
+
+      // End via match_summary
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'match_summary', feature: 'game_info', category: 'game_info' },
+      });
+
+      const matchEnd = emittedEvents.find((e) => e.type === 'MATCH_END');
+      expect(matchEnd).toBeDefined();
+      expect(matchEnd!.type).toBe('MATCH_END');
+    });
+
+    it('should not double-start if "landed" arrives after "playing"', () => {
+      // playing triggers start
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'playing', feature: 'game_info', category: 'game_info' },
+      });
+
+      // landed arrives later -- should NOT start another match (already inMatch)
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'landed', feature: 'game_info', category: 'game_info' },
+      });
+
+      const matchStarts = emittedEvents.filter((e) => e.type === 'MATCH_START');
+      expect(matchStarts).toHaveLength(1);
+    });
+
+    it('should track stats across landed->match_summary lifecycle', () => {
+      // Start match via landed
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'landed', feature: 'game_info', category: 'game_info' },
+      });
+
+      // Accumulate stats
+      processor.processRawEvent('kill', JSON.stringify({ victimName: 'A', weapon: 'R-301', headshot: false }));
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: 2, assists: 1, damage: 500, teams: 8, players: 20 },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      // End match via match_summary
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'match_summary', feature: 'game_info', category: 'game_info' },
+      });
+
+      const session = processor.getSessionStats();
+      expect(session.kills).toBe(2); // tabs authoritative
+      expect(session.assists).toBe(1);
+      expect(session.damage).toBe(500);
+      expect(session.matchesPlayed).toBe(1);
     });
 
     it('should not double-start if raw match_start arrives after phase playing', () => {

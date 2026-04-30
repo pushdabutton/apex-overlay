@@ -204,7 +204,7 @@ export class EventProcessor extends EventEmitter {
    * Known keys:
    *   - "tabs"       -> live match stats { kills, assists, teams, players, damage }
    *   - "name"       -> player name (string)
-   *   - "phase"      -> game phase: "lobby" | "select" | "playing" | "summary"
+   *   - "phase"      -> game phase: "lobby" | "select" | "playing" | "landed" | "loading_screen" | "match_summary" | "summary"
    *   - "weapons"    -> equipped weapons { weapon0, weapon1 }
    *   - "game_mode"  -> internal game mode string (e.g., "#PL_TITLE_UNHINGED")
    *   - "mode_name"  -> human-readable mode name (e.g., "Wildcard")
@@ -266,12 +266,20 @@ export class EventProcessor extends EventEmitter {
         // Game phase transition -- also synthesize MATCH_START / MATCH_END
         // from phase changes because ow-electron GEP does NOT send explicit
         // match_start / match_end game events. Instead it sends phase updates:
-        //   "lobby" | "select" | "playing" | "summary"
+        //   "lobby" | "select" | "loading_screen" | "landed" | "playing" | "match_summary" | "summary"
+        //
+        // Real ow-electron GEP phases from Apex:
+        //   "landed"        -> player has dropped into the map (match is active)
+        //   "match_summary" -> match ended, showing results
+        //   "loading_screen"-> transitioning between states
+        //   "lobby"         -> in the lobby (also ends match if was in one)
+        //   "select"        -> character select screen
+        //   "playing"       -> also indicates in-match (legacy / alternative)
         if (typeof value === 'string') {
           const newPhase = value.toLowerCase();
 
-          // Detect match start: transitioning TO "playing" from any non-playing state
-          if ((newPhase === 'playing' || newPhase === 'match') && !this.inMatch) {
+          // Detect match start: "landed" = player dropped into map, "playing" = legacy/alt
+          if ((newPhase === 'landed' || newPhase === 'playing' || newPhase === 'match') && !this.inMatch) {
             console.log(`[EventProcessor] MATCH DETECTED: phase -> ${newPhase} (starting match)`);
             const startEvent: DomainEvent = {
               type: 'MATCH_START',
@@ -283,8 +291,8 @@ export class EventProcessor extends EventEmitter {
             this.emit('domain-event', startEvent);
           }
 
-          // Detect match end: transitioning FROM "playing" to "lobby" or "summary"
-          if ((newPhase === 'lobby' || newPhase === 'summary' || newPhase === 'post_match') && this.inMatch) {
+          // Detect match end: "match_summary" or "lobby" (if was in match)
+          if ((newPhase === 'match_summary' || newPhase === 'lobby' || newPhase === 'summary' || newPhase === 'post_match') && this.inMatch) {
             const matchStats = this.currentMatch;
             console.log(
               `[EventProcessor] MATCH ENDED: phase -> ${newPhase} (ending match, saving stats)`,
@@ -371,6 +379,26 @@ export class EventProcessor extends EventEmitter {
           };
           this.pendingBatch.push(event);
           this.emit('domain-event', event);
+        }
+        break;
+      }
+
+      case 'totalDamageDealt': {
+        // Real-time damage counter from the damage feature.
+        // This is a running total of damage dealt in the current match,
+        // sent as a separate key from the "damage" feature category.
+        if (typeof value === 'number' || typeof value === 'string') {
+          const dmg = typeof value === 'number' ? value : parseInt(String(value), 10);
+          if (!isNaN(dmg) && this.inMatch) {
+            this.currentMatch.damage = dmg;
+            this.emit('live-stats', {
+              kills: this.currentMatch.kills,
+              assists: this.currentMatch.assists,
+              damage: dmg,
+              teams: 0,
+              players: 0,
+            });
+          }
         }
         break;
       }

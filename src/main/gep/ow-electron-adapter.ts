@@ -89,7 +89,7 @@ export class OwElectronGEPAdapter {
   // so we can properly remove listeners on destroy.
   private eventHandlerMap = new Map<
     (payload: { events: Array<{ name: string; data: string }> }) => void,
-    (e: unknown, gameId: number, event: OwGepGameEvent) => void
+    (e: unknown, gameId: number, event: unknown) => void
   >();
   private infoHandlerMap = new Map<
     (payload: { info: Record<string, unknown> }) => void,
@@ -126,11 +126,21 @@ export class OwElectronGEPAdapter {
 
       onNewEvents: {
         addListener: (callback: (payload: { events: Array<{ name: string; data: string }> }) => void) => {
-          const handler = (_e: unknown, gameId: number, event: OwGepGameEvent): void => {
+          const handler = (_e: unknown, gameId: number, event: unknown): void => {
             // Only forward events for Apex Legends
             if (gameId === APEX_GAME_ID) {
-              console.log('[ow-electron GEP] Game event:', event.name, event.data?.slice?.(0, 200));
-              callback({ events: [{ name: event.name, data: event.data }] });
+              console.log('[ow-electron GEP] Raw game event:', JSON.stringify(event).slice(0, 500));
+
+              // Try to extract event name and data from whatever shape arrives.
+              // The ow-electron GEP may use different field names than expected.
+              const eventObj = event as Record<string, unknown>;
+              const name = (eventObj.name ?? eventObj.key ?? eventObj.event ?? eventObj.type) as string;
+              const rawData = eventObj.data ?? eventObj.value ?? JSON.stringify(eventObj);
+              const data = typeof rawData === 'string' ? rawData : JSON.stringify(rawData);
+
+              if (name) {
+                callback({ events: [{ name, data }] });
+              }
             }
           };
           this.eventHandlerMap.set(callback, handler);
