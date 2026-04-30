@@ -2,7 +2,8 @@
 // Game Constants -- Apex Legends reference data
 // ============================================================
 
-export const APEX_GAME_ID = 21170;
+// ow-native uses 21170, but ow-electron uses 21566 for Apex Legends
+export const APEX_GAME_ID = 21566;
 
 // All legends as of Season 20
 export const LEGENDS = [
