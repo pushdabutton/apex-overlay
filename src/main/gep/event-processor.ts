@@ -119,6 +119,7 @@ export class EventProcessor extends EventEmitter {
   private modeName: string | null = null;
   private equippedWeapons: Record<string, string> = {};
   private playerLocation: { x: number; y: number; z: number } | null = null;
+  private currentMapName: string | null = null;
 
   /**
    * Get the player name detected from GEP info updates.
@@ -146,6 +147,13 @@ export class EventProcessor extends EventEmitter {
    */
   getPlayerLocation(): { x: number; y: number; z: number } | null {
     return this.playerLocation ? { ...this.playerLocation } : null;
+  }
+
+  /**
+   * Get the current map name from GEP info updates.
+   */
+  getMapName(): string | null {
+    return this.currentMapName;
   }
 
   /**
@@ -202,15 +210,22 @@ export class EventProcessor extends EventEmitter {
    * Handle a single key-value info update from ow-electron GEP.
    *
    * Known keys:
-   *   - "tabs"       -> live match stats { kills, assists, teams, players, damage }
-   *   - "name"       -> player name (string)
-   *   - "phase"      -> game phase: "lobby" | "select" | "playing" | "landed" | "loading_screen" | "match_summary" | "summary"
-   *   - "weapons"    -> equipped weapons { weapon0, weapon1 }
-   *   - "game_mode"  -> internal game mode string (e.g., "#PL_TITLE_UNHINGED")
-   *   - "mode_name"  -> human-readable mode name (e.g., "Wildcard")
-   *   - "location"   -> player position { x, y, z }
-   *   - "player"     -> player info { player_name, in_game_player_name }
-   *   - "legendName" -> selected legend name
+   *   - "tabs"            -> live match stats { kills, assists, teams, players, damage }
+   *   - "name"            -> player name (string)
+   *   - "phase"           -> game phase: "lobby" | "legend_selection" | "aircraft" | "freefly" | "landed" | "loading_screen" | "match_summary"
+   *   - "weapons"         -> equipped weapons { weapon0, weapon1 }
+   *   - "game_mode"       -> internal game mode string (e.g., "#PL_TITLE_UNHINGED")
+   *   - "mode_name"       -> human-readable mode name (e.g., "Wildcard")
+   *   - "location"        -> player position { x, y, z }
+   *   - "player"          -> player info { player_name, in_game_player_name }
+   *   - "legendName"      -> selected legend name
+   *   - "legendSelect_X"  -> team legend selection { playerName, legendName, selectionOrder, lead, is_local }
+   *   - "match_summary"   -> { rank, teams, squadKills }
+   *   - "match_state"     -> "active" | "inactive"
+   *   - "map_id"/"map_name" -> current map identifier/name
+   *   - "victory"         -> true/false for win/loss
+   *   - "totalDamageDealt" -> running damage total
+   *   - "me"              -> player info bundle with legend name
    */
   private processKeyValueUpdate(key: string, value: unknown, feature?: string): void {
     switch (key) {
@@ -271,21 +286,27 @@ export class EventProcessor extends EventEmitter {
       case 'phase': {
         // Game phase transition -- also synthesize MATCH_START / MATCH_END
         // from phase changes because ow-electron GEP does NOT send explicit
-        // match_start / match_end game events. Instead it sends phase updates:
-        //   "lobby" | "select" | "loading_screen" | "landed" | "playing" | "match_summary" | "summary"
+        // match_start / match_end game events. Instead it sends phase updates.
         //
-        // Real ow-electron GEP phases from Apex:
-        //   "landed"        -> player has dropped into the map (match is active)
-        //   "match_summary" -> match ended, showing results
-        //   "loading_screen"-> transitioning between states
-        //   "lobby"         -> in the lobby (also ends match if was in one)
-        //   "select"        -> character select screen
-        //   "playing"       -> also indicates in-match (legacy / alternative)
+        // Official Apex GEP BR phase values:
+        //   "lobby"            -> main menu/lobby
+        //   "loading_screen"   -> transitioning between states
+        //   "legend_selection" -> character select screen
+        //   "aircraft"         -> in the drop ship (match has started)
+        //   "freefly"          -> free-falling from drop ship
+        //   "landed"           -> player has dropped into the map
+        //   "match_summary"    -> match ended, showing results
+        //
+        // Legacy/alternative values also handled:
+        //   "select"           -> character select (alias for legend_selection)
+        //   "playing"          -> in-match (generic)
+        //   "summary"          -> match ended (alias for match_summary)
         if (typeof value === 'string') {
           const newPhase = value.toLowerCase();
 
-          // Detect match start: "landed" = player dropped into map, "playing" = legacy/alt
-          if ((newPhase === 'landed' || newPhase === 'playing' || newPhase === 'match') && !this.inMatch) {
+          // Detect match start: aircraft/freefly/landed = in the match
+          // "playing" and "match" kept for backward compatibility
+          if ((newPhase === 'landed' || newPhase === 'aircraft' || newPhase === 'freefly' || newPhase === 'playing' || newPhase === 'match') && !this.inMatch) {
             console.log(`[EventProcessor] MATCH DETECTED: phase -> ${newPhase} (starting match)`);
             const startEvent: DomainEvent = {
               type: 'MATCH_START',
@@ -420,6 +441,82 @@ export class EventProcessor extends EventEmitter {
         break;
       }
 
+      case 'match_state': {
+        // match_state: "active" = match start, "inactive" = match end.
+        // Redundant with phase transitions but provides a clean signal.
+        if (typeof value === 'string') {
+          const state = value.toLowerCase();
+          if (state === 'active' && !this.inMatch) {
+            console.log('[EventProcessor] MATCH DETECTED: match_state -> active');
+            const startEvent: DomainEvent = {
+              type: 'MATCH_START',
+              timestamp: Date.now(),
+              mode: this.resolveCurrentMode(),
+            };
+            this.applyToStats(startEvent);
+            this.pendingBatch.push(startEvent);
+            this.emit('domain-event', startEvent);
+          } else if (state === 'inactive' && this.inMatch) {
+            console.log('[EventProcessor] MATCH ENDED: match_state -> inactive');
+            const endEvent: DomainEvent = {
+              type: 'MATCH_END',
+              timestamp: Date.now(),
+            };
+            this.applyToStats(endEvent);
+            this.pendingBatch.push(endEvent);
+            this.emit('domain-event', endEvent);
+          }
+        }
+        break;
+      }
+
+      case 'match_summary': {
+        // match_summary: { rank (1-20 placement), teams, squadKills }
+        // Emitted when the post-match summary screen appears.
+        if (typeof value === 'object' && value !== null) {
+          const summary = value as Record<string, unknown>;
+          const rank = this.safeInt(summary.rank);
+          if (rank > 0) {
+            const placementEvent: DomainEvent = {
+              type: 'MATCH_PLACEMENT',
+              position: rank,
+              timestamp: Date.now(),
+            };
+            this.pendingBatch.push(placementEvent);
+            this.emit('domain-event', placementEvent);
+            console.log(`[EventProcessor] Match placement: #${rank}`);
+          }
+        }
+        break;
+      }
+
+      case 'map_id':
+      case 'map_name': {
+        // Map info -- store for use in match persistence
+        if (typeof value === 'string' && value.length > 0) {
+          this.currentMapName = value;
+          this.emit('map-update', value);
+          console.log(`[EventProcessor] Map: ${value}`);
+        }
+        break;
+      }
+
+      case 'victory': {
+        // victory: true/false for win/loss
+        // When true, effectively means placement #1
+        if (value === true || value === 'true') {
+          const placementEvent: DomainEvent = {
+            type: 'MATCH_PLACEMENT',
+            position: 1,
+            timestamp: Date.now(),
+          };
+          this.pendingBatch.push(placementEvent);
+          this.emit('domain-event', placementEvent);
+          console.log('[EventProcessor] VICTORY! Placement: #1');
+        }
+        break;
+      }
+
       case 'totalDamageDealt': {
         // Real-time damage counter from the damage feature.
         // This is a running total of damage dealt in the current match,
@@ -441,8 +538,30 @@ export class EventProcessor extends EventEmitter {
       }
 
       default:
-        // Log unknown keys for debugging during development
-        console.log(`[EventProcessor] Unhandled info key: "${key}" (feature: ${feature ?? 'unknown'})`);
+        // Handle legendSelect_0, legendSelect_1, legendSelect_2 from the "team" feature.
+        // Shape: { playerName, legendName, selectionOrder, lead, is_local }
+        // Only the entry with is_local=true is the local player's legend.
+        if (key.startsWith('legendSelect_')) {
+          if (typeof value === 'object' && value !== null) {
+            const sel = value as Record<string, unknown>;
+            if (sel.is_local === true || sel.is_local === 'true') {
+              const legendName = sel.legendName as string;
+              if (legendName && typeof legendName === 'string' && legendName.length > 0) {
+                console.log(`[EventProcessor] Local legend selected via ${key}: ${legendName}`);
+                const event: DomainEvent = {
+                  type: 'LEGEND_SELECTED',
+                  legend: legendName,
+                  timestamp: Date.now(),
+                };
+                this.pendingBatch.push(event);
+                this.emit('domain-event', event);
+              }
+            }
+          }
+        } else {
+          // Log unknown keys for debugging during development
+          console.log(`[EventProcessor] Unhandled info key: "${key}" (feature: ${feature ?? 'unknown'})`);
+        }
         break;
     }
   }

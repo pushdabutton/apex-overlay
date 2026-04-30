@@ -911,5 +911,174 @@ describe('EventProcessor', () => {
       // The raw path always emits regardless of inMatch. Let's verify behavior.
       expect(matchStarts.length).toBeGreaterThanOrEqual(1);
     });
+
+    it('should detect match start from "aircraft" phase', () => {
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'aircraft', feature: 'match_info' },
+      });
+
+      const starts = emittedEvents.filter((e) => e.type === 'MATCH_START');
+      expect(starts.length).toBe(1);
+    });
+
+    it('should detect match start from "freefly" phase', () => {
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'freefly', feature: 'match_info' },
+      });
+
+      const starts = emittedEvents.filter((e) => e.type === 'MATCH_START');
+      expect(starts.length).toBe(1);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Additional GEP keys: match_state, match_summary, legendSelect_*, map, victory
+  // -----------------------------------------------------------------------
+  describe('additional GEP key handlers', () => {
+    it('should detect match start from match_state "active"', () => {
+      processor.processInfoUpdate({
+        info: { key: 'match_state', value: 'active', feature: 'match_info' },
+      });
+
+      const starts = emittedEvents.filter((e) => e.type === 'MATCH_START');
+      expect(starts.length).toBe(1);
+    });
+
+    it('should detect match end from match_state "inactive"', () => {
+      // Start a match first
+      processor.processInfoUpdate({
+        info: { key: 'match_state', value: 'active', feature: 'match_info' },
+      });
+      emittedEvents.length = 0;
+
+      // End it
+      processor.processInfoUpdate({
+        info: { key: 'match_state', value: 'inactive', feature: 'match_info' },
+      });
+
+      const ends = emittedEvents.filter((e) => e.type === 'MATCH_END');
+      expect(ends.length).toBe(1);
+    });
+
+    it('should not start match if already in match via match_state', () => {
+      processor.processInfoUpdate({
+        info: { key: 'match_state', value: 'active', feature: 'match_info' },
+      });
+      processor.processInfoUpdate({
+        info: { key: 'match_state', value: 'active', feature: 'match_info' },
+      });
+
+      const starts = emittedEvents.filter((e) => e.type === 'MATCH_START');
+      expect(starts.length).toBe(1);
+    });
+
+    it('should emit MATCH_PLACEMENT from match_summary with rank', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'match_summary',
+          value: { rank: 3, teams: 20, squadKills: 7 },
+          feature: 'match_info',
+        },
+      });
+
+      const placements = emittedEvents.filter((e) => e.type === 'MATCH_PLACEMENT');
+      expect(placements.length).toBe(1);
+      expect((placements[0] as { type: 'MATCH_PLACEMENT'; position: number }).position).toBe(3);
+    });
+
+    it('should emit MATCH_PLACEMENT #1 on victory=true', () => {
+      processor.processInfoUpdate({
+        info: { key: 'victory', value: true, feature: 'match_info' },
+      });
+
+      const placements = emittedEvents.filter((e) => e.type === 'MATCH_PLACEMENT');
+      expect(placements.length).toBe(1);
+      expect((placements[0] as { type: 'MATCH_PLACEMENT'; position: number }).position).toBe(1);
+    });
+
+    it('should not emit placement on victory=false', () => {
+      processor.processInfoUpdate({
+        info: { key: 'victory', value: false, feature: 'match_info' },
+      });
+
+      const placements = emittedEvents.filter((e) => e.type === 'MATCH_PLACEMENT');
+      expect(placements.length).toBe(0);
+    });
+
+    it('should track map from map_name key', () => {
+      processor.processInfoUpdate({
+        info: { key: 'map_name', value: 'Kings Canyon', feature: 'game_info' },
+      });
+
+      expect(processor.getMapName()).toBe('Kings Canyon');
+    });
+
+    it('should track map from map_id key', () => {
+      processor.processInfoUpdate({
+        info: { key: 'map_id', value: 'mp_rr_canyonlands_hu', feature: 'game_info' },
+      });
+
+      expect(processor.getMapName()).toBe('mp_rr_canyonlands_hu');
+    });
+
+    it('should extract local legend from legendSelect_0 with is_local=true', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'legendSelect_0',
+          value: {
+            playerName: 'TestPlayer',
+            legendName: 'Wraith',
+            selectionOrder: 1,
+            lead: false,
+            is_local: true,
+          },
+          feature: 'team',
+        },
+      });
+
+      const legends = emittedEvents.filter((e) => e.type === 'LEGEND_SELECTED');
+      expect(legends.length).toBe(1);
+      expect((legends[0] as { type: 'LEGEND_SELECTED'; legend: string }).legend).toBe('Wraith');
+    });
+
+    it('should ignore legendSelect_1 when is_local is false', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'legendSelect_1',
+          value: {
+            playerName: 'Teammate',
+            legendName: 'Lifeline',
+            selectionOrder: 2,
+            lead: false,
+            is_local: false,
+          },
+          feature: 'team',
+        },
+      });
+
+      const legends = emittedEvents.filter((e) => e.type === 'LEGEND_SELECTED');
+      expect(legends.length).toBe(0);
+    });
+
+    it('should handle legendSelect_2 with string "true" for is_local', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'legendSelect_2',
+          value: {
+            playerName: 'Player3',
+            legendName: 'Octane',
+            selectionOrder: 3,
+            lead: true,
+            is_local: 'true',
+          },
+          feature: 'team',
+        },
+      });
+
+      // is_local as string "true" is also accepted (GEP may send strings)
+      const legends = emittedEvents.filter((e) => e.type === 'LEGEND_SELECTED');
+      expect(legends.length).toBe(1);
+      expect((legends[0] as { type: 'LEGEND_SELECTED'; legend: string }).legend).toBe('Octane');
+    });
   });
 });

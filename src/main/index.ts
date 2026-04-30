@@ -115,6 +115,10 @@ async function bootstrap(): Promise<void> {
     broadcastToAll(IPC.PLAYER_LOCATION, location);
   });
 
+  processor.on('map-update', (mapName: string) => {
+    currentMap = mapName;
+  });
+
   await gepManager.initialize();
 
   // 9. Start API polling
@@ -134,6 +138,8 @@ function handleDomainEvent(
 ): void {
   switch (event.type) {
     case 'MATCH_START': {
+      console.log('[apex-coach] MATCH_START detected! Mode:', event.mode);
+
       // Clear any pending post-match reset timer from the previous match
       if (matchResetTimer !== null) {
         clearTimeout(matchResetTimer);
@@ -157,12 +163,33 @@ function handleDomainEvent(
     }
 
     case 'MATCH_END': {
-      if (currentSessionId !== null && matchStartedAt) {
-        const matchStats = gepManager.getProcessor().getCurrentMatchStats();
-        console.log('[apex-coach] MATCH_END - matchStats:', JSON.stringify(matchStats));
-        console.log('[apex-coach] MATCH_END - currentLegend:', currentLegend, 'currentMap:', currentMap);
-        let matchId: number | null = null;
+      // Grab match stats FIRST, before any resets — this is the data the player needs
+      const matchStats = gepManager.getProcessor().getCurrentMatchStats();
+      console.log('[apex-coach] MATCH_END - matchStats:', JSON.stringify(matchStats));
+      console.log('[apex-coach] MATCH_END - currentLegend:', currentLegend, 'currentMap:', currentMap);
+      console.log('[apex-coach] MATCH_END - sessionId:', currentSessionId, 'matchStartedAt:', matchStartedAt);
 
+      let matchId: number | null = null;
+
+      // ALWAYS broadcast to UI so the player sees their stats,
+      // regardless of session state.  The previous code gated the
+      // broadcast on (currentSessionId && matchStartedAt), which
+      // caused all-zero stats when MATCH_START hadn't created a session.
+      broadcastToAll(IPC.MATCH_END, {
+        matchId: null, // will be updated below if persisted
+        sessionId: currentSessionId,
+        stats: matchStats,
+        legend: currentLegend,
+        map: currentMap,
+        mode: currentMode,
+        timestamp: event.timestamp,
+      });
+
+      // Show post-match overlay (always — player should see their screen)
+      showWindow('post-match');
+
+      // Persist to DB and run coaching IF we have a session
+      if (currentSessionId !== null && matchStartedAt) {
         // Persist match data — wrapped in try/catch so a DB failure
         // doesn't kill coaching evaluation or UI updates
         try {
@@ -226,21 +253,6 @@ function handleDomainEvent(
         } catch (err) {
           console.error('[apex-coach] Coaching evaluation failed:', err);
         }
-
-        // Always broadcast to UI so the player sees their stats.
-        // Include legend and map so the post-match window can display them.
-        broadcastToAll(IPC.MATCH_END, {
-          matchId,
-          sessionId: currentSessionId,
-          stats: matchStats,
-          legend: currentLegend,
-          map: currentMap,
-          mode: currentMode,
-          timestamp: event.timestamp,
-        });
-
-        // Show post-match overlay
-        showWindow('post-match');
       }
 
       // Delay clearing per-match accumulators so the post-match window

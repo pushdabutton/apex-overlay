@@ -59,7 +59,7 @@ function PostMatchInner() {
   }, []);
 
   return (
-    <div className="overlay-panel p-4 w-[600px] max-h-[700px] overflow-y-auto flex flex-col gap-3">
+    <div className="overlay-panel-opaque p-4 w-[600px] max-h-[700px] overflow-y-auto flex flex-col gap-3">
       {/* Draggable header */}
       <div className="draggable-region flex items-center justify-between pb-2 border-b border-overlay-border">
         <span className="text-overlay-lg font-bold text-white/90">POST-MATCH ANALYSIS</span>

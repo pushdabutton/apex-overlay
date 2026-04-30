@@ -5,6 +5,15 @@
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
 }
 
+/* Post-match window: nearly fully opaque so game doesn't bleed through.
+   This is a full information display, not a semi-transparent HUD. */
+.overlay-panel-opaque {
+  background: rgba(15, 15, 25, 0.97);
+  backdrop-filter: blur(16px);
+  @apply rounded-lg border border-overlay-border;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.7);
+}
+
 .overlay-card {
   @apply bg-overlay-card rounded-md border border-overlay-border p-3;
 }
