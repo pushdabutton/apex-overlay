@@ -73,19 +73,69 @@ export function createGEPProvider(): GEPProvider {
  */
 function createOwElectronProvider(packages: {
   gep: unknown;
-  on(event: 'ready', handler: () => void): void;
+  on(event: 'ready', handler: (e: unknown, packageName: string, version: string) => void): void;
 }): GEPProvider {
-  // The GEP package may already be ready (if app init is fast)
-  // or may become ready shortly. Either way, the adapter wraps
-  // whatever gep object is at packages.gep right now, and
-  // GEPManager's retry loop handles the "not ready yet" case.
-  //
-  // We also listen for 'ready' to log when it fires.
-  packages.on('ready', () => {
-    console.log('[GEP Factory] ow-electron packages ready event fired');
+  // The GEP package is NOT available until the 'ready' event fires.
+  // We return a deferred provider that queues calls until gep is ready,
+  // then replays them.
+  let realProvider: GEPProvider | null = null;
+  const pendingFeatureCalls: Array<{ features: string[]; resolve: (v: unknown) => void }> = [];
+  const pendingEventListeners: Array<(payload: { events: Array<{ name: string; data: string }> }) => void> = [];
+  const pendingInfoListeners: Array<(payload: { info: Record<string, unknown> }) => void> = [];
+
+  packages.on('ready', (_e: unknown, packageName: string, _version: string) => {
+    if (packageName !== 'gep') return;
+    console.log('[GEP Factory] GEP package ready — creating adapter');
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const adapter = new OwElectronGEPAdapter(packages.gep as any);
+    realProvider = adapter.asProvider();
+
+    // Replay any queued operations
+    for (const call of pendingFeatureCalls) {
+      realProvider.setRequiredFeatures(call.features).then(call.resolve);
+    }
+    for (const cb of pendingEventListeners) {
+      realProvider.onNewEvents.addListener(cb);
+    }
+    for (const cb of pendingInfoListeners) {
+      realProvider.onInfoUpdates2.addListener(cb);
+    }
+    pendingFeatureCalls.length = 0;
+    pendingEventListeners.length = 0;
+    pendingInfoListeners.length = 0;
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const adapter = new OwElectronGEPAdapter(packages.gep as any);
-  return adapter.asProvider();
+  // Return a proxy provider that either forwards to the real one
+  // or queues operations until ready
+  return {
+    setRequiredFeatures: async (features: string[]) => {
+      if (realProvider) return realProvider.setRequiredFeatures(features);
+      return new Promise((resolve) => {
+        pendingFeatureCalls.push({ features, resolve });
+      });
+    },
+    onNewEvents: {
+      addListener: (cb) => {
+        if (realProvider) { realProvider.onNewEvents.addListener(cb); return; }
+        pendingEventListeners.push(cb);
+      },
+      removeListener: (cb) => {
+        if (realProvider) { realProvider.onNewEvents.removeListener(cb); return; }
+        const idx = pendingEventListeners.indexOf(cb);
+        if (idx >= 0) pendingEventListeners.splice(idx, 1);
+      },
+    },
+    onInfoUpdates2: {
+      addListener: (cb) => {
+        if (realProvider) { realProvider.onInfoUpdates2.addListener(cb); return; }
+        pendingInfoListeners.push(cb);
+      },
+      removeListener: (cb) => {
+        if (realProvider) { realProvider.onInfoUpdates2.removeListener(cb); return; }
+        const idx = pendingInfoListeners.indexOf(cb);
+        if (idx >= 0) pendingInfoListeners.splice(idx, 1);
+      },
+    },
+  };
 }
