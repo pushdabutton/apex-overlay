@@ -491,4 +491,106 @@ describe('EventProcessor', () => {
       expect(match.damage).toBe(1200);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Session Stats Reconciliation at MATCH_END
+  // When tabs set authoritative match totals, session stats may be lower
+  // because not all individual events came through. Reconciliation fixes this.
+  // -----------------------------------------------------------------------
+
+  describe('session stats reconciliation at match end', () => {
+    it('should reconcile session stats with tabs totals when tabs are higher', () => {
+      processor.processRawEvent('match_start', JSON.stringify({ mode: 'battle_royale' }));
+
+      // Only 2 individual kill events arrive...
+      processor.processRawEvent('kill', JSON.stringify({ victimName: 'A', weapon: 'R-301', headshot: false }));
+      processor.processRawEvent('kill', JSON.stringify({ victimName: 'B', weapon: 'R-301', headshot: false }));
+
+      // ...but tabs says kills=5 (authoritative game data)
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: 5, assists: 3, damage: 1500, teams: 5, players: 12 },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      // End the match -- reconciliation should use tabs totals since they're higher
+      processor.processRawEvent('match_end', JSON.stringify({}));
+
+      const session = processor.getSessionStats();
+      expect(session.kills).toBe(5);   // tabs total, not 2 from events
+      expect(session.assists).toBe(3); // tabs total, not 0 from events
+      expect(session.damage).toBe(1500); // tabs total
+      expect(session.matchesPlayed).toBe(1);
+    });
+
+    it('should keep event-based session stats when they are higher than tabs', () => {
+      processor.processRawEvent('match_start', JSON.stringify({ mode: 'battle_royale' }));
+
+      // 3 individual kill events
+      processor.processRawEvent('kill', JSON.stringify({ victimName: 'A', weapon: 'R-301', headshot: false }));
+      processor.processRawEvent('kill', JSON.stringify({ victimName: 'B', weapon: 'R-301', headshot: false }));
+      processor.processRawEvent('kill', JSON.stringify({ victimName: 'C', weapon: 'R-301', headshot: false }));
+
+      // tabs only says 2 kills (stale update)
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: 2, assists: 0, damage: 500, teams: 5, players: 12 },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      processor.processRawEvent('match_end', JSON.stringify({}));
+
+      const session = processor.getSessionStats();
+      expect(session.kills).toBe(3); // event total is higher, keep it
+    });
+
+    it('should accumulate session stats correctly across multiple matches with reconciliation', () => {
+      // Match 1: tabs says 4 kills, events only had 2
+      processor.processRawEvent('match_start', JSON.stringify({ mode: 'battle_royale' }));
+      processor.processRawEvent('kill', JSON.stringify({ victimName: 'A', weapon: 'R-301', headshot: false }));
+      processor.processRawEvent('kill', JSON.stringify({ victimName: 'B', weapon: 'R-301', headshot: false }));
+      processor.processInfoUpdate({
+        info: { key: 'tabs', value: { kills: 4, assists: 1, damage: 800, teams: 5, players: 12 }, feature: 'match_info', category: 'match_info' },
+      });
+      processor.processRawEvent('match_end', JSON.stringify({}));
+
+      // After match 1: session kills should be 4 (from tabs)
+      expect(processor.getSessionStats().kills).toBe(4);
+
+      // Match 2: tabs says 3 kills, events had all 3
+      processor.processRawEvent('match_start', JSON.stringify({ mode: 'battle_royale' }));
+      processor.processRawEvent('kill', JSON.stringify({ victimName: 'C', weapon: 'R-301', headshot: false }));
+      processor.processRawEvent('kill', JSON.stringify({ victimName: 'D', weapon: 'R-301', headshot: false }));
+      processor.processRawEvent('kill', JSON.stringify({ victimName: 'E', weapon: 'R-301', headshot: false }));
+      processor.processInfoUpdate({
+        info: { key: 'tabs', value: { kills: 3, assists: 0, damage: 600, teams: 3, players: 6 }, feature: 'match_info', category: 'match_info' },
+      });
+      processor.processRawEvent('match_end', JSON.stringify({}));
+
+      // After match 2: session kills should be 4 + 3 = 7
+      const session = processor.getSessionStats();
+      expect(session.kills).toBe(7);
+      expect(session.matchesPlayed).toBe(2);
+    });
+
+    it('should preserve match stats after match end for post-match window', () => {
+      processor.processRawEvent('match_start', JSON.stringify({ mode: 'battle_royale' }));
+      processor.processRawEvent('kill', JSON.stringify({ victimName: 'A', weapon: 'R-301', headshot: true }));
+      processor.processRawEvent('damage', JSON.stringify({ damageAmount: '250', targetName: 'B', weapon: 'R-301' }));
+      processor.processRawEvent('match_end', JSON.stringify({}));
+
+      // After match end, currentMatch stats should still be readable
+      // (they only reset on the NEXT match_start)
+      const match = processor.getCurrentMatchStats();
+      expect(match.kills).toBe(1);
+      expect(match.damage).toBe(250);
+      expect(match.headshots).toBe(1);
+    });
+  });
 });

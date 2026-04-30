@@ -80,6 +80,12 @@ export class EventProcessor extends EventEmitter {
   // Weapon kill accumulator: weapon -> { kills, headshots, damage }
   private weaponKills = new Map<string, { kills: number; headshots: number; damage: number }>();
 
+  // Snapshot of session stats at match start, used to reconcile at match end.
+  // When tabs data (authoritative game totals) is available, the match totals
+  // may be higher than what individual events accumulated. We use this snapshot
+  // to calculate: session_stat = snapshot + max(event_increments, tabs_total).
+  private sessionAtMatchStart: SessionStats = emptySessionStats();
+
   /**
    * Process a single raw GEP event by name and data string.
    * Converts it to a domain event, updates stats, and emits.
@@ -405,12 +411,18 @@ export class EventProcessor extends EventEmitter {
         this.matchStartTime = event.timestamp;
         this.currentMatch = emptyMatchStats();
         this.weaponKills.clear();
+        this.sessionAtMatchStart = { ...this.session };
         this.inMatch = true;
         break;
 
       case 'MATCH_END':
-        // Session stats were already accumulated in real-time during the match.
-        // Just increment match counter and reset per-match state.
+        // Reconcile session stats with the authoritative match totals.
+        // When ow-electron GEP tabs updates are active, currentMatch stats
+        // reflect the game's cumulative totals (set directly from tabs),
+        // which may differ from the sum of individual event increments.
+        // We use the match totals as the source of truth and adjust session
+        // stats to compensate for any missed individual events.
+        this.reconcileSessionStats();
         this.session.matchesPlayed++;
         this.inMatch = false;
         this.matchStartTime = 0;
@@ -474,6 +486,32 @@ export class EventProcessor extends EventEmitter {
       // do not affect numeric stat counters
       default:
         break;
+    }
+  }
+
+  /**
+   * Reconcile session stats with the authoritative match totals at match end.
+   *
+   * When ow-electron GEP tabs set currentMatch stats directly (e.g., kills=5),
+   * the session stats may only have accumulated 3 kills from individual events.
+   * This method uses: session_stat = sessionAtMatchStart + max(eventDelta, matchTotal)
+   * to ensure the session totals are accurate.
+   */
+  private reconcileSessionStats(): void {
+    const snap = this.sessionAtMatchStart;
+    const match = this.currentMatch;
+
+    // For each stat: compute how much was added via individual events,
+    // then use whichever is higher -- the event-based delta or the tabs total.
+    const keys: (keyof MatchStats)[] = [
+      'kills', 'deaths', 'assists', 'damage', 'headshots',
+      'knockdowns', 'revives', 'respawns',
+    ];
+    for (const key of keys) {
+      const eventDelta = this.session[key] - snap[key];
+      const matchTotal = match[key];
+      // Use the larger of the two as the authoritative contribution
+      this.session[key] = snap[key] + Math.max(eventDelta, matchTotal);
     }
   }
 }

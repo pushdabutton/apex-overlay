@@ -42,6 +42,7 @@ let currentLegend = 'Unknown';
 let currentMap: string | null = null;
 let currentMode: Match['mode'] = 'unknown';
 let matchStartedAt: string | null = null;
+let matchResetTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function bootstrap(): Promise<void> {
   // 1. Initialize SQLite database and run migrations
@@ -133,6 +134,12 @@ function handleDomainEvent(
 ): void {
   switch (event.type) {
     case 'MATCH_START': {
+      // Clear any pending post-match reset timer from the previous match
+      if (matchResetTimer !== null) {
+        clearTimeout(matchResetTimer);
+        matchResetTimer = null;
+      }
+
       // Ensure a session exists
       if (currentSessionId === null) {
         currentSessionId = sessionRepo.create();
@@ -218,11 +225,15 @@ function handleDomainEvent(
           console.error('[apex-coach] Coaching evaluation failed:', err);
         }
 
-        // Always broadcast to UI so the player sees their stats
+        // Always broadcast to UI so the player sees their stats.
+        // Include legend and map so the post-match window can display them.
         broadcastToAll(IPC.MATCH_END, {
           matchId,
           sessionId: currentSessionId,
           stats: matchStats,
+          legend: currentLegend,
+          map: currentMap,
+          mode: currentMode,
           timestamp: event.timestamp,
         });
 
@@ -230,10 +241,16 @@ function handleDomainEvent(
         showWindow('post-match');
       }
 
-      // Reset per-match accumulators
-      matchStartedAt = null;
-      currentMap = null;
-      currentMode = 'unknown';
+      // Delay clearing per-match accumulators so the post-match window
+      // has time to receive and render the data. The post-match summary
+      // should remain visible until the next match starts.
+      // Reset is deferred by 30 seconds, or cleared early on next MATCH_START.
+      matchResetTimer = setTimeout(() => {
+        matchStartedAt = null;
+        currentMap = null;
+        currentMode = 'unknown';
+        matchResetTimer = null;
+      }, 30_000);
       break;
     }
 

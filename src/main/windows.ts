@@ -82,10 +82,15 @@ export async function createWindows(): Promise<void> {
       });
     }
 
-    // Position main overlay in top-right
+    // Position main overlay at center-right of screen
+    // (avoids overlapping mini-map, kill feed, and inventory in top-right)
     if (windowName === 'main-overlay') {
-      const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
-      win.setPosition(screenWidth - 330, 10);
+      const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+      const windowWidth = 320;
+      const windowHeight = 480;
+      const x = screenWidth - windowWidth - 10; // 10px from right edge
+      const y = Math.round((screenHeight - windowHeight) / 2); // vertically centered
+      win.setPosition(x, y);
       win.show();
     }
 
