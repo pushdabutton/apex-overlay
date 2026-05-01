@@ -248,7 +248,7 @@ export class EventProcessor extends EventEmitter {
         // causes the post-match display to show 0 kills / 0 damage even though
         // the correct data was captured during the match. Skip null tabs entirely.
         if (value === null || value === undefined) {
-          console.log('[EventProcessor] Ignoring null/undefined tabs update (GEP post-match clear)');
+          // console.log('[EventProcessor] Ignoring null/undefined tabs update (GEP post-match clear)');
           return;
         }
 
@@ -262,7 +262,7 @@ export class EventProcessor extends EventEmitter {
         const players = this.safeInt(tabs.players);
         const knockdowns = this.safeInt(tabs.knockdowns);
 
-        console.log(`[EventProcessor] tabs update: kills=${kills} assists=${assists} damage=${damage} knockdowns=${knockdowns}`);
+        // console.log(`[EventProcessor] tabs update: kills=${kills} assists=${assists} damage=${damage} knockdowns=${knockdowns}`);
 
         // Emit a live stats update event so the UI can react
         this.emit('live-stats', { kills, assists, damage, teams, players });
@@ -294,7 +294,7 @@ export class EventProcessor extends EventEmitter {
           this.pendingBatch.push(autoStart);
           this.emit('domain-event', autoStart);
         } else if (!this.inMatch && inCooldown && (kills > 0 || damage > 0 || assists > 0)) {
-          console.log(`[EventProcessor] Suppressed tabs auto-start (cooldown: ${timeSinceMatchEnd}ms < ${TABS_AUTOSTART_COOLDOWN_MS}ms)`);
+          // console.log(`[EventProcessor] Suppressed tabs auto-start (cooldown: ${timeSinceMatchEnd}ms < ${TABS_AUTOSTART_COOLDOWN_MS}ms)`);
         }
 
         if (this.inMatch) {
@@ -551,7 +551,7 @@ export class EventProcessor extends EventEmitter {
         if (typeof value === 'string' && value.length > 0) {
           this.currentMapName = value;
           this.emit('map-update', value);
-          console.log(`[EventProcessor] Map: ${value}`);
+          // console.log(`[EventProcessor] Map: ${value}`);
         }
         break;
       }
@@ -693,7 +693,7 @@ export class EventProcessor extends EventEmitter {
           }
         } else {
           // Log unknown keys for debugging during development
-          console.log(`[EventProcessor] Unhandled info key: "${key}" (feature: ${feature ?? 'unknown'})`);
+          // console.log(`[EventProcessor] Unhandled info key: "${key}" (feature: ${feature ?? 'unknown'})`);
         }
         break;
     }

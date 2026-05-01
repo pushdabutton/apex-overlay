@@ -265,7 +265,7 @@ export class OwElectronGEPAdapter {
             if (gameId === APEX_GAME_ID) {
               // Log raw event BEFORE any processing for debugging
               getGEPRawLogger().logGameEvent(gameId, event);
-              console.log('[ow-electron GEP] Raw game event:', JSON.stringify(event).slice(0, 500));
+              // console.log('[ow-electron GEP] Raw game event:', JSON.stringify(event).slice(0, 500));
 
               // Try to extract event name and data from whatever shape arrives.
               // The ow-electron GEP may use different field names than expected.
@@ -301,7 +301,7 @@ export class OwElectronGEPAdapter {
 
             // Log raw info update BEFORE any processing for debugging
             getGEPRawLogger().logInfoUpdate(gameId, info);
-            console.log('[ow-electron GEP] Raw info update:', JSON.stringify(info).slice(0, 500));
+            // console.log('[ow-electron GEP] Raw info update:', JSON.stringify(info).slice(0, 500));
 
             // ow-electron GEP sends individual key-value updates:
             //   { gameId, feature, category, key, value }
