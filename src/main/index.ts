@@ -119,6 +119,43 @@ async function bootstrap(): Promise<void> {
     currentMap = mapName;
   });
 
+  // LEGEND-HUNT: Call getInfo() when loading_screen fires.
+  // Legend selection happens BETWEEN lobby and loading_screen.
+  // If legendSelect_X didn't fire as a live event, getInfo() may still
+  // have the data available as a retroactive snapshot.
+  //
+  // If legend is STILL unknown after getInfo(), fall back to the
+  // mozambiquehe.re API which exposes selectedLegend in realtime data.
+  processor.on('raw-phase', (rawPhase: string) => {
+    if (rawPhase === 'loading_screen') {
+      gepManager.getInfo().then(async (snapshot) => {
+        console.log('[LEGEND-HUNT] getInfo() on loading_screen - FULL snapshot:', JSON.stringify(snapshot));
+
+        // If legend is still Unknown after getInfo() processing, try API fallback
+        if (currentLegend === 'Unknown') {
+          const playerName = processor.getPlayerName();
+          if (playerName && apiClient.isConfigured()) {
+            console.log(`[LEGEND-HUNT] Legend still Unknown, trying mozambique API for player: ${playerName}`);
+            try {
+              const apiLegend = await apiClient.getSelectedLegend(playerName);
+              if (apiLegend && currentLegend === 'Unknown') {
+                console.log(`[LEGEND-HUNT] mozambique API selectedLegend: "${apiLegend}"`);
+                currentLegend = apiLegend;
+                broadcastToAll(IPC.MATCH_UPDATE, { type: 'legend', legend: apiLegend });
+              }
+            } catch (err) {
+              console.warn('[LEGEND-HUNT] mozambique API fallback failed:', err);
+            }
+          } else {
+            console.log(`[LEGEND-HUNT] Cannot try API fallback: playerName=${playerName}, apiConfigured=${apiClient.isConfigured()}`);
+          }
+        }
+      }).catch((err) => {
+        console.warn('[LEGEND-HUNT] getInfo() on loading_screen failed:', err);
+      });
+    }
+  });
+
   await gepManager.initialize();
 
   // 9. Start API polling

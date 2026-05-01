@@ -115,6 +115,10 @@ function createOwElectronProvider(packages: {
         pendingFeatureCalls.push({ features, resolve });
       });
     },
+    getInfo: async () => {
+      if (realProvider?.getInfo) return realProvider.getInfo();
+      return null;
+    },
     onNewEvents: {
       addListener: (cb) => {
         if (realProvider) { realProvider.onNewEvents.addListener(cb); return; }

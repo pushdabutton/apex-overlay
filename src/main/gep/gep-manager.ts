@@ -21,6 +21,8 @@ export interface GEPProvider {
     success: boolean;
     supportedFeatures: string[];
   }>;
+  /** Query current game state snapshot. Returns null if not available. */
+  getInfo?(): Promise<unknown>;
   onNewEvents: {
     addListener(callback: (payload: { events: Array<{ name: string; data: string }> }) => void): void;
     removeListener(callback: (payload: { events: Array<{ name: string; data: string }> }) => void): void;
@@ -104,6 +106,17 @@ export class GEPManager extends EventEmitter {
    */
   returnToIdle(): void {
     this.stateMachine.transition('lobby');
+  }
+
+  /**
+   * Query the current GEP game state snapshot.
+   * Returns the raw snapshot from the provider, or null if not available.
+   */
+  async getInfo(): Promise<unknown> {
+    if (this.provider.getInfo) {
+      return this.provider.getInfo();
+    }
+    return null;
   }
 
   /**

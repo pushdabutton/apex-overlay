@@ -50,7 +50,7 @@ interface OwGepDetectedEvent {
 }
 
 interface OwGepPackage {
-  setRequiredFeatures(gameId: number, features: string[]): Promise<unknown>;
+  setRequiredFeatures(gameId: number, features: string[] | null): Promise<unknown>;
   getInfo(gameId: number): Promise<unknown>;
   on(event: 'new-game-event', handler: (e: unknown, gameId: number, event: OwGepGameEvent) => void): void;
   on(event: 'new-info-update', handler: (e: unknown, gameId: number, info: OwGepInfoUpdate) => void): void;
@@ -123,25 +123,47 @@ export class OwElectronGEPAdapter {
       e.enable();
       if (gameId === APEX_GAME_ID) {
         console.log('[ow-electron GEP] game-detected: calling setRequiredFeatures immediately');
-        this.gep.setRequiredFeatures(APEX_GAME_ID, GEP_REQUIRED_FEATURES).then(async () => {
-          console.log('[ow-electron GEP] Early setRequiredFeatures succeeded on game-detected');
 
-          // Retroactively query current game state to catch legendSelect_X
-          // that may have already fired before features were registered.
-          try {
-            const snapshot = await this.gep.getInfo(APEX_GAME_ID);
-            console.log('[ow-electron GEP] getInfo snapshot:', JSON.stringify(snapshot).slice(0, 500));
-            if (snapshot && typeof snapshot === 'object') {
-              this.processGetInfoSnapshot(snapshot);
-            }
-          } catch (err) {
-            console.warn('[ow-electron GEP] getInfo failed:', err);
-          }
-        }).catch((err: unknown) => {
-          console.warn('[ow-electron GEP] Early setRequiredFeatures failed (GEPManager retry will handle):', err);
+        // Try null first (registers ALL features per ow-electron sample app).
+        // This may enable internal features not in our explicit list.
+        // If null fails, fall back to the explicit feature array.
+        this.gep.setRequiredFeatures(APEX_GAME_ID, null).then(async () => {
+          console.log('[ow-electron GEP] Early setRequiredFeatures(null) succeeded');
+          await this.onFeaturesRegistered();
+        }).catch(() => {
+          // null didn't work, fall back to explicit list
+          console.log('[ow-electron GEP] setRequiredFeatures(null) failed, trying explicit feature list');
+          this.gep.setRequiredFeatures(APEX_GAME_ID, GEP_REQUIRED_FEATURES).then(async () => {
+            console.log('[ow-electron GEP] Early setRequiredFeatures(features) succeeded');
+            await this.onFeaturesRegistered();
+          }).catch((err: unknown) => {
+            console.warn('[ow-electron GEP] Early setRequiredFeatures failed (GEPManager retry will handle):', err);
+          });
         });
       }
     });
+  }
+
+  // ------------------------------------------------------------------
+  // Post-registration handler: getInfo() + snapshot processing
+  // ------------------------------------------------------------------
+
+  /**
+   * Called after setRequiredFeatures succeeds in game-detected handler.
+   * Queries current game state to retroactively capture legendSelect_X
+   * that may have already fired before features were registered.
+   */
+  private async onFeaturesRegistered(): Promise<void> {
+    try {
+      const snapshot = await this.gep.getInfo(APEX_GAME_ID);
+      // Log the COMPLETE snapshot (not truncated) for legend hunt debugging
+      console.log('[LEGEND-HUNT] getInfo() on game-detected - FULL snapshot:', JSON.stringify(snapshot));
+      if (snapshot && typeof snapshot === 'object') {
+        this.processGetInfoSnapshot(snapshot);
+      }
+    } catch (err) {
+      console.warn('[ow-electron GEP] getInfo failed:', err);
+    }
   }
 
   // ------------------------------------------------------------------
@@ -223,6 +245,16 @@ export class OwElectronGEPAdapter {
         } catch (err) {
           console.warn('[ow-electron GEP] setRequiredFeatures failed:', err);
           return { success: false, supportedFeatures: [] };
+        }
+      },
+
+      getInfo: async () => {
+        try {
+          const snapshot = await this.gep.getInfo(APEX_GAME_ID);
+          return snapshot;
+        } catch (err) {
+          console.warn('[ow-electron GEP] getInfo failed:', err);
+          return null;
         }
       },
 

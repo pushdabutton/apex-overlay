@@ -351,6 +351,11 @@ export class EventProcessor extends EventEmitter {
         if (typeof value === 'string') {
           const newPhase = value.toLowerCase();
 
+          // Emit the RAW phase string so external listeners (e.g., index.ts)
+          // can react to specific GEP phases like "loading_screen" that get
+          // mapped away by parseGamePhase.
+          this.emit('raw-phase', newPhase);
+
           // Detect match start: aircraft/freefly/landed = in the match
           // "playing" and "match" kept for backward compatibility
           if ((newPhase === 'landed' || newPhase === 'aircraft' || newPhase === 'freefly' || newPhase === 'playing' || newPhase === 'match') && !this.inMatch) {
