@@ -17,7 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "db:migrate": "tsx scripts/migrate.ts",
-    "postinstall": "electron-rebuild"
+    "rebuild": "npx @electron/rebuild -f -w better-sqlite3"
   },
   "dependencies": {
     "better-sqlite3": "^11.0.0",
