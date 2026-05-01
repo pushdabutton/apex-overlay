@@ -18,6 +18,7 @@ const WINDOW_CONFIGS: Record<WindowName, Electron.BrowserWindowConstructorOption
     transparent: true,
     frame: false,
     alwaysOnTop: true,
+    focusable: false,
     resizable: true,
     skipTaskbar: true,
     webPreferences: {
@@ -103,11 +104,17 @@ export function getWindow(name: WindowName): BrowserWindow | undefined {
   return windows.get(name);
 }
 
+// Overlay windows (main-overlay) are focusable: false — never call win.focus() on them
+// as it would steal focus from the game and cause the overlay to disappear.
+const NON_FOCUSABLE_WINDOWS: WindowName[] = ['main-overlay'];
+
 export function showWindow(name: WindowName): void {
   const win = windows.get(name);
   if (win && !win.isDestroyed()) {
     win.show();
-    win.focus();
+    if (!NON_FOCUSABLE_WINDOWS.includes(name)) {
+      win.focus();
+    }
   }
 }
 
