@@ -51,6 +51,7 @@ interface OwGepDetectedEvent {
 
 interface OwGepPackage {
   setRequiredFeatures(gameId: number, features: string[]): Promise<unknown>;
+  getInfo(gameId: number): Promise<unknown>;
   on(event: 'new-game-event', handler: (e: unknown, gameId: number, event: OwGepGameEvent) => void): void;
   on(event: 'new-info-update', handler: (e: unknown, gameId: number, info: OwGepInfoUpdate) => void): void;
   on(event: 'game-detected', handler: (e: OwGepDetectedEvent, gameId: number, name: string, info: unknown) => void): void;
@@ -97,6 +98,10 @@ export class OwElectronGEPAdapter {
     (e: unknown, gameId: number, info: OwGepInfoUpdate) => void
   >();
 
+  // Stores registered info update callbacks so game-detected handler
+  // can emit retroactive snapshot data through them.
+  private infoCallbacks: Array<(payload: { info: Record<string, unknown> }) => void> = [];
+
   constructor(gep: OwGepPackage) {
     this.gep = gep;
 
@@ -110,17 +115,97 @@ export class OwElectronGEPAdapter {
     //
     // The retry loop in GEPManager still runs as a fallback; this is an
     // ADDITIONAL early registration attempt to minimize the window.
+    //
+    // After setRequiredFeatures succeeds, call getInfo() to retroactively
+    // capture any game state (especially legendSelect_X) that fired before
+    // features were registered or the overlay started.
     this.gep.on('game-detected', (e: OwGepDetectedEvent, gameId: number) => {
       e.enable();
       if (gameId === APEX_GAME_ID) {
         console.log('[ow-electron GEP] game-detected: calling setRequiredFeatures immediately');
-        this.gep.setRequiredFeatures(APEX_GAME_ID, GEP_REQUIRED_FEATURES).then(() => {
+        this.gep.setRequiredFeatures(APEX_GAME_ID, GEP_REQUIRED_FEATURES).then(async () => {
           console.log('[ow-electron GEP] Early setRequiredFeatures succeeded on game-detected');
+
+          // Retroactively query current game state to catch legendSelect_X
+          // that may have already fired before features were registered.
+          try {
+            const snapshot = await this.gep.getInfo(APEX_GAME_ID);
+            console.log('[ow-electron GEP] getInfo snapshot:', JSON.stringify(snapshot).slice(0, 500));
+            if (snapshot && typeof snapshot === 'object') {
+              this.processGetInfoSnapshot(snapshot);
+            }
+          } catch (err) {
+            console.warn('[ow-electron GEP] getInfo failed:', err);
+          }
         }).catch((err: unknown) => {
           console.warn('[ow-electron GEP] Early setRequiredFeatures failed (GEPManager retry will handle):', err);
         });
       }
     });
+  }
+
+  // ------------------------------------------------------------------
+  // getInfo() snapshot processing
+  // ------------------------------------------------------------------
+
+  /**
+   * Process a snapshot from getInfo(), searching for legendSelect_X
+   * keys and emitting them through registered info update callbacks.
+   *
+   * The snapshot shape from ow-electron getInfo is not formally documented.
+   * It may be:
+   *   { [category]: { [key]: value } }
+   *   { [key]: value }
+   *   or deeply nested. We recursively search for legendSelect_X keys.
+   */
+  private processGetInfoSnapshot(snapshot: unknown): void {
+    console.log('[ow-electron GEP] Processing getInfo snapshot for retroactive legend detection');
+    this.findAndEmitLegendFromSnapshot(snapshot);
+  }
+
+  /**
+   * Recursively search an object tree for keys starting with
+   * "legendSelect_" and emit each found entry as an info update
+   * callback, mimicking the shape that EventProcessor expects.
+   */
+  private findAndEmitLegendFromSnapshot(obj: unknown): void {
+    if (!obj || typeof obj !== 'object') return;
+
+    // Handle arrays by recursing into each element
+    if (Array.isArray(obj)) {
+      for (const item of obj) {
+        this.findAndEmitLegendFromSnapshot(item);
+      }
+      return;
+    }
+
+    const record = obj as Record<string, unknown>;
+
+    for (const key of Object.keys(record)) {
+      const value = record[key];
+
+      if (key.startsWith('legendSelect_')) {
+        // Found a legendSelect key -- emit it as an info update.
+        // Value may be a JSON string or already-parsed object.
+        const parsedValue = typeof value === 'string' ? tryParseJson(value) : value;
+
+        console.log(`[ow-electron GEP] Snapshot: found ${key}, emitting to ${this.infoCallbacks.length} callbacks`);
+
+        for (const cb of this.infoCallbacks) {
+          cb({
+            info: {
+              key,
+              value: parsedValue,
+              feature: 'team',
+              category: 'match_info',
+            },
+          });
+        }
+      } else if (value && typeof value === 'object') {
+        // Recurse into nested objects/arrays to find legendSelect_X
+        this.findAndEmitLegendFromSnapshot(value);
+      }
+    }
   }
 
   /**
@@ -176,6 +261,9 @@ export class OwElectronGEPAdapter {
 
       onInfoUpdates2: {
         addListener: (callback: (payload: { info: Record<string, unknown> }) => void) => {
+          // Track callback so game-detected handler can emit snapshot data
+          this.infoCallbacks.push(callback);
+
           const handler = (_e: unknown, gameId: number, info: unknown): void => {
             if (gameId !== APEX_GAME_ID) return;
 
@@ -211,6 +299,10 @@ export class OwElectronGEPAdapter {
           this.gep.on('new-info-update', handler);
         },
         removeListener: (callback: (payload: { info: Record<string, unknown> }) => void) => {
+          // Remove from tracked callbacks
+          const idx = this.infoCallbacks.indexOf(callback);
+          if (idx !== -1) this.infoCallbacks.splice(idx, 1);
+
           const handler = this.infoHandlerMap.get(callback);
           if (handler) {
             this.gep.removeListener('new-info-update', handler as (...args: unknown[]) => void);
