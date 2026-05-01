@@ -20,7 +20,7 @@
 // ============================================================
 
 import type { GEPProvider } from './gep-manager';
-import { APEX_GAME_ID } from '../../shared/constants';
+import { APEX_GAME_ID, GEP_REQUIRED_FEATURES } from '../../shared/constants';
 import { getGEPRawLogger } from './gep-raw-logger';
 
 /**
@@ -102,8 +102,24 @@ export class OwElectronGEPAdapter {
 
     // Auto-enable any detected game so GEP starts sending events.
     // Without this, GEP silently ignores games.
-    this.gep.on('game-detected', (e: OwGepDetectedEvent, _gameId: number) => {
+    //
+    // CRITICAL: Also call setRequiredFeatures immediately here, not just in
+    // GEPManager's retry loop. This closes the timing race where legendSelect_X
+    // fires during the 'legend_selection' phase (which starts quickly after
+    // game-detected) but setRequiredFeatures hasn't completed yet.
+    //
+    // The retry loop in GEPManager still runs as a fallback; this is an
+    // ADDITIONAL early registration attempt to minimize the window.
+    this.gep.on('game-detected', (e: OwGepDetectedEvent, gameId: number) => {
       e.enable();
+      if (gameId === APEX_GAME_ID) {
+        console.log('[ow-electron GEP] game-detected: calling setRequiredFeatures immediately');
+        this.gep.setRequiredFeatures(APEX_GAME_ID, GEP_REQUIRED_FEATURES).then(() => {
+          console.log('[ow-electron GEP] Early setRequiredFeatures succeeded on game-detected');
+        }).catch((err: unknown) => {
+          console.warn('[ow-electron GEP] Early setRequiredFeatures failed (GEPManager retry will handle):', err);
+        });
+      }
     });
   }
 

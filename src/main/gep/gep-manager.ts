@@ -10,7 +10,7 @@
 import { EventEmitter } from 'events';
 import { EventProcessor } from './event-processor';
 import { MatchStateMachine, MatchState } from './match-state';
-import { APEX_GAME_ID } from '../../shared/constants';
+import { APEX_GAME_ID, GEP_REQUIRED_FEATURES } from '../../shared/constants';
 
 // -----------------------------------------------------------------------
 // GEP Provider Interface -- abstraction over real Overwolf GEP or mock
@@ -31,29 +31,9 @@ export interface GEPProvider {
   };
 }
 
-// Required GEP features for Apex Legends (all 17 documented features)
-// CRITICAL: Missing features means their info updates/events are silently dropped by GEP.
-// Previously only 11 were registered -- 'team' was missing, which meant legendSelect_X
-// info updates (used for legend detection) never arrived from real GEP.
-export const GEP_REQUIRED_FEATURES: string[] = [
-  'gep_internal',
-  'me',
-  'localization',
-  'game_info',
-  'match_info',
-  'match_state',
-  'team',
-  'roster',
-  'location',
-  'rank',
-  'match_summary',
-  'damage',
-  'inventory',
-  'kill',
-  'revive',
-  'death',
-  'kill_feed',
-];
+// GEP_REQUIRED_FEATURES is now defined in shared/constants.ts and re-exported here
+// for backwards compatibility with any imports from this module.
+export { GEP_REQUIRED_FEATURES } from '../../shared/constants';
 
 // Retry configuration (per skill doc: 10 retries, 3s delay)
 const MAX_RETRIES = 10;

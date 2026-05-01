@@ -597,18 +597,38 @@ export class EventProcessor extends EventEmitter {
             console.log(`[EventProcessor] Ignoring null ${key} update (GEP post-match clear)`);
             break;
           }
+
+          console.log(`[EventProcessor][LEGEND-DEBUG] ${key} raw value type=${typeof value}, value=${JSON.stringify(value)}`);
+
+          // Format A (ow-native / documented): value is an object with legendName + is_local fields
+          // { playerName, legendName: "#character_wraith_NAME", selectionOrder, lead, is_local }
           if (typeof value === 'object' && value !== null) {
             const sel = value as Record<string, unknown>;
-            // DEBUG: Log every legendSelect_X update for diagnostic purposes
-            console.log(`[EventProcessor][LEGEND-DEBUG] ${key} received:`, JSON.stringify(sel));
-            console.log(`[EventProcessor][LEGEND-DEBUG] ${key} is_local=${sel.is_local} (type: ${typeof sel.is_local}), legendName=${sel.legendName} (type: ${typeof sel.legendName})`);
+            console.log(`[EventProcessor][LEGEND-DEBUG] ${key} object: is_local=${sel.is_local} (${typeof sel.is_local}), legendName=${sel.legendName}`);
             if (sel.is_local === true || sel.is_local === 'true' || sel.is_local === '1' || sel.is_local === 1) {
               const legendRaw = sel.legendName as string;
-              console.log(`[EventProcessor][LEGEND-DEBUG] ${key} IS local player. Raw legendName: "${legendRaw}"`);
               if (legendRaw && typeof legendRaw === 'string' && legendRaw.length > 0) {
                 const cleaned = cleanLegendName(legendRaw);
-                console.log(`[EventProcessor][LEGEND-DEBUG] cleanLegendName("${legendRaw}") -> "${cleaned}"`);
-                console.log(`[EventProcessor] Local legend selected via ${key}: ${legendRaw} -> ${cleaned}`);
+                console.log(`[EventProcessor][LEGEND-DEBUG] ${key} object match -> "${cleaned}"`);
+                const event: DomainEvent = {
+                  type: 'LEGEND_SELECTED',
+                  legend: cleaned,
+                  timestamp: Date.now(),
+                };
+                this.pendingBatch.push(event);
+                this.emit('domain-event', event);
+              }
+            } else if (sel.is_local === false || sel.is_local === 'false' || sel.is_local === '0' || sel.is_local === 0) {
+              // Not local player — skip
+              console.log(`[EventProcessor][LEGEND-DEBUG] ${key} is not local player, skipping`);
+            } else {
+              // is_local missing or unexpected — ow-electron may not include it.
+              // If there is only ONE legendSelect key (index 0) and no is_local,
+              // assume it IS the local player (ow-electron simplified format).
+              const legendRaw = (sel.legendName ?? sel.legend ?? sel.character_name) as string;
+              if (legendRaw && typeof legendRaw === 'string' && legendRaw.length > 0 && key === 'legendSelect_0') {
+                const cleaned = cleanLegendName(legendRaw);
+                console.log(`[EventProcessor][LEGEND-DEBUG] ${key} no is_local, assuming local (legendSelect_0 fallback) -> "${cleaned}"`);
                 const event: DomainEvent = {
                   type: 'LEGEND_SELECTED',
                   legend: cleaned,
@@ -618,6 +638,21 @@ export class EventProcessor extends EventEmitter {
                 this.emit('domain-event', event);
               }
             }
+          }
+
+          // Format B (ow-electron simplified): value is a plain string (the legend name or localization key)
+          // This handles the case where ow-electron sends "Wraith" or "#character_wraith_NAME" directly.
+          // Only fire for legendSelect_0 since we can't know if it's the local player otherwise.
+          else if (typeof value === 'string' && value.length > 0 && key === 'legendSelect_0') {
+            const cleaned = cleanLegendName(value);
+            console.log(`[EventProcessor][LEGEND-DEBUG] ${key} string format -> "${cleaned}"`);
+            const event: DomainEvent = {
+              type: 'LEGEND_SELECTED',
+              legend: cleaned,
+              timestamp: Date.now(),
+            };
+            this.pendingBatch.push(event);
+            this.emit('domain-event', event);
           }
         }
         // Handle roster_0 through roster_59 from the "roster" feature.

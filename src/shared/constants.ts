@@ -5,6 +5,30 @@
 // ow-native uses 21170, but ow-electron uses 21566 for Apex Legends
 export const APEX_GAME_ID = 21566;
 
+// All 17 documented Apex Legends GEP features.
+// CRITICAL: Missing features = silent data loss. GEP drops events for unregistered features.
+// Must be registered via setRequiredFeatures BEFORE the game phase that emits them.
+// legendSelect_X (legend detection) fires during 'legend_selection' phase via 'team' feature.
+export const GEP_REQUIRED_FEATURES: string[] = [
+  'gep_internal',
+  'me',
+  'localization',
+  'game_info',
+  'match_info',
+  'match_state',
+  'team',
+  'roster',
+  'location',
+  'rank',
+  'match_summary',
+  'damage',
+  'inventory',
+  'kill',
+  'revive',
+  'death',
+  'kill_feed',
+];
+
 // All legends as of Season 20
 export const LEGENDS = [
   'Alter',
