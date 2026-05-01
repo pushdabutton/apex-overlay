@@ -21,6 +21,7 @@ interface MatchResult {
   damage: number;
   legend: string;
   map: string | null;
+  mode: string | null;
 }
 
 export interface MatchState {
@@ -32,6 +33,7 @@ export interface MatchState {
   knockdowns: number;
   legend: string;
   map: string | null;
+  mode: string | null;
   placement: number | null;
   isInMatch: boolean;
   coachingInsights: MatchInsight[];
@@ -52,6 +54,7 @@ const INITIAL_STATE = {
   knockdowns: 0,
   legend: 'Unknown',
   map: null as string | null,
+  mode: null as string | null,
   placement: null as number | null,
   isInMatch: false,
   coachingInsights: [] as MatchInsight[],
@@ -125,6 +128,7 @@ export const useMatchStore = create<MatchState>((set) => ({
       damage: result.damage,
       legend: result.legend,
       map: result.map,
+      mode: result.mode ?? null,
       isInMatch: false,
     });
   },

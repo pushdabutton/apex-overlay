@@ -31,6 +31,7 @@ function PostMatchInner() {
         damage: payload.stats.damage,
         legend: payload.legend ?? 'Unknown',
         map: payload.map ?? null,
+        mode: payload.mode ?? null,
       });
     });
 
@@ -63,7 +64,10 @@ function PostMatchInner() {
       {/* Draggable header */}
       <div className="draggable-region flex items-center justify-between pb-2 border-b border-overlay-border">
         <span className="text-overlay-lg font-bold text-white/90">POST-MATCH ANALYSIS</span>
-        <button className="no-drag text-overlay-xs text-white/30 hover:text-white/60 transition-colors">
+        <button
+          className="no-drag text-overlay-xs text-white/30 hover:text-white/60 transition-colors"
+          onClick={() => window.apexCoach.invoke(IPC.WINDOW_HIDE)}
+        >
           DISMISS
         </button>
       </div>

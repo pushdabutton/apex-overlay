@@ -19,6 +19,7 @@ export const PostMatchSummary = memo(function PostMatchSummary() {
   const damage = useMatchStore((s) => s.damage);
   const legend = useMatchStore((s) => s.legend);
   const map = useMatchStore((s) => s.map);
+  const mode = useMatchStore((s) => s.mode);
   const coachingInsights = useMatchStore((s) => s.coachingInsights);
 
   const avgKills = useSessionStore((s) => s.avgKills);
@@ -35,7 +36,12 @@ export const PostMatchSummary = memo(function PostMatchSummary() {
           )}
           <span className="text-overlay-sm text-white/60">{legend}</span>
         </div>
-        {map && <span className="text-overlay-xs text-white/40">{map}</span>}
+        <div className="flex items-center gap-2">
+          {mode && mode !== 'unknown' && (
+            <span className="text-overlay-xs text-white/40 uppercase">{mode.replace(/_/g, ' ')}</span>
+          )}
+          {map && <span className="text-overlay-xs text-white/40">{map}</span>}
+        </div>
       </div>
 
       {/* Core stats grid */}

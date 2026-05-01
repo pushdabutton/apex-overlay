@@ -29,7 +29,8 @@ const WINDOW_CONFIGS: Record<WindowName, Electron.BrowserWindowConstructorOption
   'post-match': {
     width: 600,
     height: 700,
-    transparent: true,
+    transparent: false,
+    backgroundColor: '#0f0f19',
     frame: false,
     alwaysOnTop: true,
     resizable: true,

@@ -21,6 +21,7 @@ export const IPC = {
   PLAYER_LOCATION: 'player:location',
 
   // Renderer -> Main (requests)
+  WINDOW_HIDE: 'window:hide',
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
   SETTINGS_GET_ALL: 'settings:get-all',

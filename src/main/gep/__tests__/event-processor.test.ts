@@ -1080,5 +1080,65 @@ describe('EventProcessor', () => {
       expect(legends.length).toBe(1);
       expect((legends[0] as { type: 'LEGEND_SELECTED'; legend: string }).legend).toBe('Octane');
     });
+
+    it('should handle legendSelect_0 with string "1" for is_local (official GEP format)', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'legendSelect_0',
+          value: {
+            playerName: 'GEPPlayer',
+            legendName: 'Horizon',
+            selectionOrder: 2,
+            lead: false,
+            is_local: '1',
+          },
+          feature: 'team',
+        },
+      });
+
+      // is_local as string "1" is the official Apex GEP format
+      const legends = emittedEvents.filter((e) => e.type === 'LEGEND_SELECTED');
+      expect(legends.length).toBe(1);
+      expect((legends[0] as { type: 'LEGEND_SELECTED'; legend: string }).legend).toBe('Horizon');
+    });
+
+    it('should handle legendSelect_0 with numeric 1 for is_local', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'legendSelect_0',
+          value: {
+            playerName: 'NumericPlayer',
+            legendName: 'Bangalore',
+            selectionOrder: 1,
+            lead: true,
+            is_local: 1,
+          },
+          feature: 'team',
+        },
+      });
+
+      const legends = emittedEvents.filter((e) => e.type === 'LEGEND_SELECTED');
+      expect(legends.length).toBe(1);
+      expect((legends[0] as { type: 'LEGEND_SELECTED'; legend: string }).legend).toBe('Bangalore');
+    });
+
+    it('should ignore legendSelect when is_local is "0"', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'legendSelect_1',
+          value: {
+            playerName: 'Teammate',
+            legendName: 'Caustic',
+            selectionOrder: 2,
+            lead: false,
+            is_local: '0',
+          },
+          feature: 'team',
+        },
+      });
+
+      const legends = emittedEvents.filter((e) => e.type === 'LEGEND_SELECTED');
+      expect(legends.length).toBe(0);
+    });
   });
 });

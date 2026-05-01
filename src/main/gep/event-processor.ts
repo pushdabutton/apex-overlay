@@ -544,7 +544,7 @@ export class EventProcessor extends EventEmitter {
         if (key.startsWith('legendSelect_')) {
           if (typeof value === 'object' && value !== null) {
             const sel = value as Record<string, unknown>;
-            if (sel.is_local === true || sel.is_local === 'true') {
+            if (sel.is_local === true || sel.is_local === 'true' || sel.is_local === '1' || sel.is_local === 1) {
               const legendName = sel.legendName as string;
               if (legendName && typeof legendName === 'string' && legendName.length > 0) {
                 console.log(`[EventProcessor] Local legend selected via ${key}: ${legendName}`);

@@ -24,7 +24,7 @@ describe('Match Store', () => {
     expect(state.coachingInsights).toEqual([]);
   });
 
-  it('setMatchResult stores placement, kills, damage, legend, map', () => {
+  it('setMatchResult stores placement, kills, damage, legend, map, mode', () => {
     useMatchStore.getState().setMatchResult({
       placement: 2,
       kills: 8,
@@ -33,6 +33,7 @@ describe('Match Store', () => {
       damage: 2100,
       legend: 'Horizon',
       map: 'World\'s Edge',
+      mode: 'ranked',
     });
 
     const state = useMatchStore.getState();
@@ -43,6 +44,7 @@ describe('Match Store', () => {
     expect(state.damage).toBe(2100);
     expect(state.legend).toBe('Horizon');
     expect(state.map).toBe('World\'s Edge');
+    expect(state.mode).toBe('ranked');
   });
 
   it('updateFromIpc updates in-match stats', () => {
@@ -68,6 +70,7 @@ describe('Match Store', () => {
       damage: 1500,
       legend: 'Wraith',
       map: 'Storm Point',
+      mode: 'battle_royale',
     });
 
     useMatchStore.getState().resetMatch();
@@ -80,6 +83,7 @@ describe('Match Store', () => {
     expect(state.isInMatch).toBe(false);
     expect(state.placement).toBeNull();
     expect(state.map).toBeNull();
+    expect(state.mode).toBeNull();
     expect(state.coachingInsights).toEqual([]);
   });
 
