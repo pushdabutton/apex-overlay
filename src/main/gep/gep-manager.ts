@@ -31,19 +31,28 @@ export interface GEPProvider {
   };
 }
 
-// Required GEP features for Apex Legends
+// Required GEP features for Apex Legends (all 17 documented features)
+// CRITICAL: Missing features means their info updates/events are silently dropped by GEP.
+// Previously only 11 were registered -- 'team' was missing, which meant legendSelect_X
+// info updates (used for legend detection) never arrived from real GEP.
 export const GEP_REQUIRED_FEATURES: string[] = [
-  'kill',
-  'death',
-  'assist',
-  'knockdown',
-  'damage',
-  'revive',
-  'respawn',
-  'match_info',
-  'game_info',
-  'rank',
+  'gep_internal',
   'me',
+  'localization',
+  'game_info',
+  'match_info',
+  'match_state',
+  'team',
+  'roster',
+  'location',
+  'rank',
+  'match_summary',
+  'damage',
+  'inventory',
+  'kill',
+  'revive',
+  'death',
+  'kill_feed',
 ];
 
 // Retry configuration (per skill doc: 10 retries, 3s delay)

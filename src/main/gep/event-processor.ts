@@ -70,6 +70,12 @@ function emptySessionStats(): SessionStats {
   };
 }
 
+// Duration in ms after MATCH_END during which tabs auto-start is suppressed.
+// GEP may send stale tabs data a few seconds after the match ends. Without
+// this cooldown, the stale tabs with kills > 0 would trigger a spurious
+// MATCH_START that resets the PostMatch display to all zeros.
+const TABS_AUTOSTART_COOLDOWN_MS = 10_000;
+
 export class EventProcessor extends EventEmitter {
   private matchStartTime = 0;
   private currentMatch: MatchStats = emptyMatchStats();
@@ -77,6 +83,9 @@ export class EventProcessor extends EventEmitter {
   private inMatch = false;
   private pendingBatch: DomainEvent[] = [];
   private batchCallbacks: BatchCallback[] = [];
+
+  // Timestamp of the last MATCH_END, used to suppress spurious tabs auto-start
+  private lastMatchEndTime = 0;
 
   // Weapon kill accumulator: weapon -> { kills, headshots, damage }
   private weaponKills = new Map<string, { kills: number; headshots: number; damage: number }>();
@@ -256,7 +265,15 @@ export class EventProcessor extends EventEmitter {
         // ow-electron GEP sometimes sends tabs updates before the phase
         // transition that triggers MATCH_START. If tabs arrive with data,
         // a match IS happening -- auto-start it to avoid all-zeros.
-        if (!this.inMatch && (kills > 0 || damage > 0 || assists > 0)) {
+        //
+        // BUT: Suppress auto-start during the cooldown window after MATCH_END.
+        // GEP may send stale tabs data a few seconds after the match ends.
+        // Without this guard, stale tabs with kills > 0 would trigger a
+        // spurious MATCH_START that resets the PostMatch display to all zeros.
+        const timeSinceMatchEnd = Date.now() - this.lastMatchEndTime;
+        const inCooldown = this.lastMatchEndTime > 0 && timeSinceMatchEnd < TABS_AUTOSTART_COOLDOWN_MS;
+
+        if (!this.inMatch && (kills > 0 || damage > 0 || assists > 0) && !inCooldown) {
           console.log('[EventProcessor] MATCH AUTO-START: tabs data arrived before phase transition');
           const autoStart: DomainEvent = {
             type: 'MATCH_START',
@@ -266,6 +283,8 @@ export class EventProcessor extends EventEmitter {
           this.applyToStats(autoStart);
           this.pendingBatch.push(autoStart);
           this.emit('domain-event', autoStart);
+        } else if (!this.inMatch && inCooldown && (kills > 0 || damage > 0 || assists > 0)) {
+          console.log(`[EventProcessor] Suppressed tabs auto-start (cooldown: ${timeSinceMatchEnd}ms < ${TABS_AUTOSTART_COOLDOWN_MS}ms)`);
         }
 
         if (this.inMatch) {
@@ -577,6 +596,34 @@ export class EventProcessor extends EventEmitter {
               }
             }
           }
+        }
+        // Handle roster_0 through roster_59 from the "roster" feature.
+        // Roster entries include the player's legend (character_name) and is_local flag.
+        // This serves as a fallback for legend detection when the overlay starts
+        // AFTER legend selection (legendSelect_X was missed).
+        // Shape: { name, isTeammate, team_id, platform_hw, state, is_local, character_name }
+        else if (key.startsWith('roster_')) {
+          if (typeof value === 'object' && value !== null) {
+            const roster = value as Record<string, unknown>;
+            const isLocal = roster.is_local === true || roster.is_local === 'true'
+              || roster.is_local === '1' || roster.is_local === 1;
+            if (isLocal) {
+              const legendRaw = (roster.character_name as string)
+                ?? (roster.legendName as string)
+                ?? (roster.legend as string);
+              if (legendRaw && typeof legendRaw === 'string' && legendRaw.length > 0) {
+                const cleaned = cleanLegendName(legendRaw);
+                console.log(`[EventProcessor] Local legend from roster via ${key}: ${legendRaw} -> ${cleaned}`);
+                const event: DomainEvent = {
+                  type: 'LEGEND_SELECTED',
+                  legend: cleaned,
+                  timestamp: Date.now(),
+                };
+                this.pendingBatch.push(event);
+                this.emit('domain-event', event);
+              }
+            }
+          }
         } else {
           // Log unknown keys for debugging during development
           console.log(`[EventProcessor] Unhandled info key: "${key}" (feature: ${feature ?? 'unknown'})`);
@@ -670,6 +717,8 @@ export class EventProcessor extends EventEmitter {
         this.weaponKills.clear();
         this.sessionAtMatchStart = { ...this.session };
         this.inMatch = true;
+        // Clear cooldown since a legitimate match start has been detected
+        this.lastMatchEndTime = 0;
         break;
 
       case 'MATCH_END':
@@ -683,6 +732,7 @@ export class EventProcessor extends EventEmitter {
         this.session.matchesPlayed++;
         this.inMatch = false;
         this.matchStartTime = 0;
+        this.lastMatchEndTime = Date.now();
         break;
 
       case 'PLAYER_KILL': {
