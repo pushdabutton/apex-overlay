@@ -29,6 +29,14 @@
   @apply text-overlay-xl font-bold text-white;
 }
 
+/* Highlighted stat value -- used for primary stats like Kills and Damage.
+   Larger font, gold tint to draw attention without using animation. */
+.overlay-value-highlight {
+  @apply text-overlay-xl font-bold text-apex-gold;
+  font-size: 1.4rem;
+  text-shadow: 0 0 8px rgba(241, 196, 15, 0.25);
+}
+
 .overlay-divider {
   @apply border-t border-overlay-border my-2;
 }

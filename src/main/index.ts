@@ -185,6 +185,20 @@ function handleDomainEvent(
         timestamp: event.timestamp,
       });
 
+      // Broadcast cumulative session stats so all renderer windows
+      // (including post-match, which is a separate BrowserWindow with
+      // its own store) can display session averages and comparisons.
+      const sessionStats = gepManager.getProcessor().getSessionStats();
+      broadcastToAll(IPC.SESSION_UPDATE, {
+        totalKills: sessionStats.kills,
+        totalDeaths: sessionStats.deaths,
+        totalAssists: sessionStats.assists,
+        totalDamage: sessionStats.damage,
+        totalHeadshots: sessionStats.headshots,
+        totalKnockdowns: sessionStats.knockdowns,
+        matchesPlayed: sessionStats.matchesPlayed,
+      });
+
       // Show post-match overlay (always — player should see their screen)
       showWindow('post-match');
 

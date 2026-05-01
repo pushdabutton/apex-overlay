@@ -1141,4 +1141,197 @@ describe('EventProcessor', () => {
       expect(legends.length).toBe(0);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // cleanLegendName integration: localization key stripping
+  // -----------------------------------------------------------------------
+  describe('legend name cleaning (localization keys)', () => {
+    it('should clean #character_wraith_NAME to Wraith from legendName key', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'legendName',
+          value: '#character_wraith_NAME',
+          feature: 'me',
+        },
+      });
+
+      const legends = emittedEvents.filter((e) => e.type === 'LEGEND_SELECTED');
+      expect(legends.length).toBe(1);
+      expect((legends[0] as { type: 'LEGEND_SELECTED'; legend: string }).legend).toBe('Wraith');
+    });
+
+    it('should clean localization key from legendSelect_ entries', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'legendSelect_0',
+          value: {
+            playerName: 'TestPlayer',
+            legendName: '#character_horizon_NAME',
+            selectionOrder: 1,
+            lead: false,
+            is_local: true,
+          },
+          feature: 'team',
+        },
+      });
+
+      const legends = emittedEvents.filter((e) => e.type === 'LEGEND_SELECTED');
+      expect(legends.length).toBe(1);
+      expect((legends[0] as { type: 'LEGEND_SELECTED'; legend: string }).legend).toBe('Horizon');
+    });
+
+    it('should clean localization key from me.legendName', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'me',
+          value: {
+            legendName: '#character_bangalore_NAME',
+            name: 'TestPlayer',
+          },
+          feature: 'me',
+        },
+      });
+
+      const legends = emittedEvents.filter((e) => e.type === 'LEGEND_SELECTED');
+      expect(legends.length).toBe(1);
+      expect((legends[0] as { type: 'LEGEND_SELECTED'; legend: string }).legend).toBe('Bangalore');
+    });
+
+    it('should clean multi-word legend name from localization key', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'legendName',
+          value: '#character_mad_maggie_NAME',
+          feature: 'me',
+        },
+      });
+
+      const legends = emittedEvents.filter((e) => e.type === 'LEGEND_SELECTED');
+      expect(legends.length).toBe(1);
+      expect((legends[0] as { type: 'LEGEND_SELECTED'; legend: string }).legend).toBe('Mad Maggie');
+    });
+
+    it('should pass through already-clean legend names', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'legendName',
+          value: 'Wraith',
+          feature: 'me',
+        },
+      });
+
+      const legends = emittedEvents.filter((e) => e.type === 'LEGEND_SELECTED');
+      expect(legends.length).toBe(1);
+      expect((legends[0] as { type: 'LEGEND_SELECTED'; legend: string }).legend).toBe('Wraith');
+    });
+
+    it('should clean legend name from legacy format', () => {
+      processor.processInfoUpdate({
+        info: {
+          legendName: '#character_octane_NAME',
+        },
+      });
+
+      const legends = emittedEvents.filter((e) => e.type === 'LEGEND_SELECTED');
+      expect(legends.length).toBe(1);
+      expect((legends[0] as { type: 'LEGEND_SELECTED'; legend: string }).legend).toBe('Octane');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Tabs auto-start: tabs data arriving before MATCH_START should auto-start
+  // -----------------------------------------------------------------------
+  describe('tabs auto-start match', () => {
+    it('should auto-start match when tabs arrive with kills > 0 and not in match', () => {
+      // No match start yet, but tabs come with kill data
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: 2, assists: 0, damage: 400, teams: 10, players: 30 },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      const starts = emittedEvents.filter((e) => e.type === 'MATCH_START');
+      expect(starts.length).toBe(1);
+
+      // Match stats should be populated
+      const match = processor.getCurrentMatchStats();
+      expect(match.kills).toBe(2);
+      expect(match.damage).toBe(400);
+    });
+
+    it('should auto-start match when tabs arrive with damage > 0 only', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: 0, assists: 0, damage: 150, teams: 15, players: 45 },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      const starts = emittedEvents.filter((e) => e.type === 'MATCH_START');
+      expect(starts.length).toBe(1);
+
+      const match = processor.getCurrentMatchStats();
+      expect(match.damage).toBe(150);
+    });
+
+    it('should NOT auto-start when tabs have all zeros', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: 0, assists: 0, damage: 0, teams: 20, players: 60 },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      const starts = emittedEvents.filter((e) => e.type === 'MATCH_START');
+      expect(starts.length).toBe(0);
+    });
+
+    it('should NOT double-start when tabs arrive after normal match start', () => {
+      // Normal match start
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'playing', feature: 'game_info', category: 'game_info' },
+      });
+
+      // Tabs arrive later (already in match)
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: 3, assists: 1, damage: 800, teams: 5, players: 12 },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      const starts = emittedEvents.filter((e) => e.type === 'MATCH_START');
+      expect(starts.length).toBe(1); // Only the one from phase, no double
+    });
+
+    it('should reconcile correctly after tabs-triggered auto-start', () => {
+      // Tabs auto-start the match
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: 4, assists: 2, damage: 1200, teams: 5, players: 12 },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      // End the match
+      processor.processRawEvent('match_end', JSON.stringify({}));
+
+      const session = processor.getSessionStats();
+      expect(session.kills).toBe(4);
+      expect(session.assists).toBe(2);
+      expect(session.damage).toBe(1200);
+      expect(session.matchesPlayed).toBe(1);
+    });
+  });
 });

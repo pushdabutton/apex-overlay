@@ -8,6 +8,7 @@
 
 import { EventEmitter } from 'events';
 import { mapGepEvent } from './event-map';
+import { cleanLegendName } from '../../shared/utils';
 import type { DomainEvent, GameMode } from '../../shared/types';
 
 export interface SessionStats {
@@ -187,7 +188,7 @@ export class EventProcessor extends EventEmitter {
     if (legendName && typeof legendName === 'string') {
       const event: DomainEvent = {
         type: 'LEGEND_SELECTED',
-        legend: legendName,
+        legend: cleanLegendName(legendName),
         timestamp: Date.now(),
       };
       this.pendingBatch.push(event);
@@ -250,6 +251,23 @@ export class EventProcessor extends EventEmitter {
         // Update current match stats from the authoritative game data.
         // GEP tabs gives us cumulative totals for the current match,
         // so we set them directly rather than incrementing.
+        //
+        // CRITICAL: Accept tabs data even when NOT explicitly in match.
+        // ow-electron GEP sometimes sends tabs updates before the phase
+        // transition that triggers MATCH_START. If tabs arrive with data,
+        // a match IS happening -- auto-start it to avoid all-zeros.
+        if (!this.inMatch && (kills > 0 || damage > 0 || assists > 0)) {
+          console.log('[EventProcessor] MATCH AUTO-START: tabs data arrived before phase transition');
+          const autoStart: DomainEvent = {
+            type: 'MATCH_START',
+            timestamp: Date.now(),
+            mode: this.resolveCurrentMode(),
+          };
+          this.applyToStats(autoStart);
+          this.pendingBatch.push(autoStart);
+          this.emit('domain-event', autoStart);
+        }
+
         if (this.inMatch) {
           this.currentMatch.kills = kills;
           this.currentMatch.assists = assists;
@@ -404,7 +422,7 @@ export class EventProcessor extends EventEmitter {
         if (typeof value === 'string' && value.length > 0) {
           const event: DomainEvent = {
             type: 'LEGEND_SELECTED',
-            legend: value,
+            legend: cleanLegendName(value),
             timestamp: Date.now(),
           };
           this.pendingBatch.push(event);
@@ -425,7 +443,7 @@ export class EventProcessor extends EventEmitter {
           if (legendFromMe && typeof legendFromMe === 'string' && legendFromMe.length > 0) {
             const event: DomainEvent = {
               type: 'LEGEND_SELECTED',
-              legend: legendFromMe,
+              legend: cleanLegendName(legendFromMe),
               timestamp: Date.now(),
             };
             this.pendingBatch.push(event);
@@ -545,12 +563,13 @@ export class EventProcessor extends EventEmitter {
           if (typeof value === 'object' && value !== null) {
             const sel = value as Record<string, unknown>;
             if (sel.is_local === true || sel.is_local === 'true' || sel.is_local === '1' || sel.is_local === 1) {
-              const legendName = sel.legendName as string;
-              if (legendName && typeof legendName === 'string' && legendName.length > 0) {
-                console.log(`[EventProcessor] Local legend selected via ${key}: ${legendName}`);
+              const legendRaw = sel.legendName as string;
+              if (legendRaw && typeof legendRaw === 'string' && legendRaw.length > 0) {
+                const cleaned = cleanLegendName(legendRaw);
+                console.log(`[EventProcessor] Local legend selected via ${key}: ${legendRaw} -> ${cleaned}`);
                 const event: DomainEvent = {
                   type: 'LEGEND_SELECTED',
-                  legend: legendName,
+                  legend: cleaned,
                   timestamp: Date.now(),
                 };
                 this.pendingBatch.push(event);

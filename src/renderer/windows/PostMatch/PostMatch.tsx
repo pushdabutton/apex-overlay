@@ -4,6 +4,7 @@ import { PerformanceBenchmark } from './PerformanceBenchmark';
 import { CoachingTips } from './CoachingTips';
 import { LegendComparison } from './LegendComparison';
 import { useMatchStore } from '../../stores/match-store';
+import { useSessionStore } from '../../stores/session-store';
 import { IPC } from '../../../shared/ipc-channels';
 import type { CoachingInsight } from '../../../shared/types';
 
@@ -46,6 +47,14 @@ function PostMatchInner() {
       useMatchStore.getState().addCoachingInsight(data as CoachingInsight);
     });
 
+    // Listen for session stats updates so PerformanceBenchmark and
+    // LegendComparison have real session averages to compare against.
+    // Without this, the session store stays at zero in the post-match window
+    // because it is a separate BrowserWindow with its own store instance.
+    const unsubSession = window.apexCoach.on(IPC.SESSION_UPDATE, (data) => {
+      useSessionStore.getState().updateFromIpc(data as Record<string, unknown>);
+    });
+
     // Reset match store when a new match starts (clears stale post-match data)
     const unsubStart = window.apexCoach.on(IPC.MATCH_START, () => {
       useMatchStore.getState().resetMatch();
@@ -55,27 +64,31 @@ function PostMatchInner() {
       unsubEnd();
       unsubUpdate();
       unsubInsight();
+      unsubSession();
       unsubStart();
     };
   }, []);
 
   return (
-    <div className="overlay-panel-opaque p-4 w-[600px] max-h-[700px] overflow-y-auto flex flex-col gap-3">
-      {/* Draggable header */}
-      <div className="draggable-region flex items-center justify-between pb-2 border-b border-overlay-border">
-        <span className="text-overlay-lg font-bold text-white/90">POST-MATCH ANALYSIS</span>
+    <div className="overlay-panel-opaque w-[620px] max-h-[720px] overflow-y-auto flex flex-col">
+      {/* Draggable header with gradient accent */}
+      <div className="draggable-region flex items-center justify-between p-4 pb-3 border-b border-overlay-border bg-gradient-to-r from-apex-purple/10 to-transparent">
+        <span className="text-overlay-lg font-bold text-white/90 tracking-wide">POST-MATCH ANALYSIS</span>
         <button
-          className="no-drag text-overlay-xs text-white/30 hover:text-white/60 transition-colors"
+          className="no-drag text-overlay-xs text-white/30 hover:text-white/60 hover:bg-white/5 px-2 py-1 rounded transition-all"
           onClick={() => window.apexCoach.invoke(IPC.WINDOW_HIDE)}
         >
           DISMISS
         </button>
       </div>
 
-      <PostMatchSummary />
-      <PerformanceBenchmark />
-      <CoachingTips />
-      <LegendComparison />
+      {/* Content with consistent padding and spacing */}
+      <div className="p-4 flex flex-col gap-4">
+        <PostMatchSummary />
+        <PerformanceBenchmark />
+        <CoachingTips />
+        <LegendComparison />
+      </div>
     </div>
   );
 }
