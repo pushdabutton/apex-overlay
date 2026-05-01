@@ -31,6 +31,7 @@ describe('PostMatchSummary', () => {
       damage: 1500,
       legend: 'Horizon',
       map: 'Storm Point',
+      mode: null,
     });
 
     render(<PostMatchSummary />);
@@ -46,6 +47,7 @@ describe('PostMatchSummary', () => {
       damage: 2000,
       legend: 'Wraith',
       map: 'World\'s Edge',
+      mode: null,
     });
 
     render(<PostMatchSummary />);
@@ -63,6 +65,7 @@ describe('PostMatchSummary', () => {
       damage: 3200,
       legend: 'Bangalore',
       map: 'Kings Canyon',
+      mode: null,
     });
 
     render(<PostMatchSummary />);
@@ -78,6 +81,7 @@ describe('PostMatchSummary', () => {
       damage: 800,
       legend: 'Pathfinder',
       map: 'Olympus',
+      mode: null,
     });
 
     render(<PostMatchSummary />);
@@ -93,6 +97,7 @@ describe('PostMatchSummary', () => {
       damage: 1200,
       legend: 'Horizon',
       map: 'Storm Point',
+      mode: null,
     });
     useMatchStore.getState().addCoachingInsight({
       id: 1,
@@ -127,11 +132,48 @@ describe('PostMatchSummary', () => {
       damage: 2200,
       legend: 'Wraith',
       map: 'World\'s Edge',
+      mode: 'ranked',
     });
 
     render(<PostMatchSummary />);
     // Should show "vs avg" section
     expect(screen.getByText(/vs avg/i)).toBeDefined();
+  });
+
+  it('shows game mode when available', () => {
+    useMatchStore.getState().setMatchResult({
+      placement: 1,
+      kills: 12,
+      deaths: 0,
+      assists: 4,
+      damage: 3500,
+      legend: 'Wraith',
+      map: 'Storm Point',
+      mode: 'ranked',
+    });
+
+    render(<PostMatchSummary />);
+    // CSS text-transform: uppercase makes it display as "RANKED",
+    // but DOM textContent is still "ranked"
+    expect(screen.getByText('ranked')).toBeDefined();
+  });
+
+  it('hides game mode when unknown', () => {
+    useMatchStore.getState().setMatchResult({
+      placement: 1,
+      kills: 5,
+      deaths: 0,
+      assists: 2,
+      damage: 1800,
+      legend: 'Horizon',
+      map: 'Kings Canyon',
+      mode: 'unknown',
+    });
+
+    render(<PostMatchSummary />);
+    // "unknown" mode should not render (filtered out in JSX)
+    const modeElements = screen.queryAllByText('unknown');
+    expect(modeElements.length).toBe(0);
   });
 
   it('is wrapped in React.memo', () => {

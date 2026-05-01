@@ -4,7 +4,7 @@
 // All handlers wrapped in try/catch for error resilience.
 // ============================================================
 
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow } from 'electron';
 import type Database from 'better-sqlite3';
 import { IPC } from '../shared/ipc-channels';
 import { SessionRepository } from './db/repositories/session-repo';
@@ -17,6 +17,21 @@ export function registerIpcHandlers(db: Database.Database): void {
   const matchRepo = new MatchRepository(db);
   const legendStatsRepo = new LegendStatsRepository(db);
   const coachingRepo = new CoachingRepository(db);
+
+  // --- Window management ---
+
+  ipcMain.handle(IPC.WINDOW_HIDE, (event) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win && !win.isDestroyed()) {
+        win.hide();
+      }
+      return true;
+    } catch (error) {
+      console.error('[IPC] WINDOW_HIDE failed:', error);
+      return false;
+    }
+  });
 
   // --- Settings (simple key-value, no snake_case mapping needed) ---
 

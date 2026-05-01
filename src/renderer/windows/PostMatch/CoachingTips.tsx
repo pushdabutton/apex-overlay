@@ -1,26 +1,28 @@
 import React from 'react';
 import { InsightBadge } from '../../components/InsightBadge';
-import { useCoachingInsights } from '../../hooks/useCoachingInsights';
+import { useMatchStore } from '../../stores/match-store';
 
+/**
+ * Additional coaching tips beyond the top 3 shown in PostMatchSummary.
+ * Uses the match store's deduplicated insights to avoid showing the same
+ * insight in both components.
+ */
 export function CoachingTips() {
-  const { matchInsights } = useCoachingInsights();
+  const coachingInsights = useMatchStore((s) => s.coachingInsights);
 
-  if (matchInsights.length === 0) {
-    return (
-      <div>
-        <h3 className="overlay-header">Coaching</h3>
-        <p className="text-overlay-sm text-white/40">
-          Play more matches to unlock coaching insights.
-        </p>
-      </div>
-    );
+  // PostMatchSummary already shows the first 3 insights via InsightList.
+  // This component shows any additional insights beyond those 3.
+  const additionalInsights = coachingInsights.slice(3);
+
+  if (additionalInsights.length === 0) {
+    return null;
   }
 
   return (
     <div>
-      <h3 className="overlay-header">Coaching Tips</h3>
+      <h3 className="overlay-header">More Coaching Tips</h3>
       <div className="flex flex-col gap-2">
-        {matchInsights.slice(0, 3).map((insight) => (
+        {additionalInsights.slice(0, 3).map((insight) => (
           <InsightBadge key={insight.id} insight={insight} />
         ))}
       </div>

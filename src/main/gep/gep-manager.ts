@@ -10,7 +10,7 @@
 import { EventEmitter } from 'events';
 import { EventProcessor } from './event-processor';
 import { MatchStateMachine, MatchState } from './match-state';
-import { APEX_GAME_ID } from '../../shared/constants';
+import { APEX_GAME_ID, GEP_REQUIRED_FEATURES } from '../../shared/constants';
 
 // -----------------------------------------------------------------------
 // GEP Provider Interface -- abstraction over real Overwolf GEP or mock
@@ -21,6 +21,8 @@ export interface GEPProvider {
     success: boolean;
     supportedFeatures: string[];
   }>;
+  /** Query current game state snapshot. Returns null if not available. */
+  getInfo?(): Promise<unknown>;
   onNewEvents: {
     addListener(callback: (payload: { events: Array<{ name: string; data: string }> }) => void): void;
     removeListener(callback: (payload: { events: Array<{ name: string; data: string }> }) => void): void;
@@ -31,20 +33,9 @@ export interface GEPProvider {
   };
 }
 
-// Required GEP features for Apex Legends
-export const GEP_REQUIRED_FEATURES: string[] = [
-  'kill',
-  'death',
-  'assist',
-  'knockdown',
-  'damage',
-  'revive',
-  'respawn',
-  'match_info',
-  'game_info',
-  'rank',
-  'me',
-];
+// GEP_REQUIRED_FEATURES is now defined in shared/constants.ts and re-exported here
+// for backwards compatibility with any imports from this module.
+export { GEP_REQUIRED_FEATURES } from '../../shared/constants';
 
 // Retry configuration (per skill doc: 10 retries, 3s delay)
 const MAX_RETRIES = 10;
@@ -115,6 +106,17 @@ export class GEPManager extends EventEmitter {
    */
   returnToIdle(): void {
     this.stateMachine.transition('lobby');
+  }
+
+  /**
+   * Query the current GEP game state snapshot.
+   * Returns the raw snapshot from the provider, or null if not available.
+   */
+  async getInfo(): Promise<unknown> {
+    if (this.provider.getInfo) {
+      return this.provider.getInfo();
+    }
+    return null;
   }
 
   /**

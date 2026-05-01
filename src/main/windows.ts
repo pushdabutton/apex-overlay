@@ -18,6 +18,7 @@ const WINDOW_CONFIGS: Record<WindowName, Electron.BrowserWindowConstructorOption
     transparent: true,
     frame: false,
     alwaysOnTop: true,
+    focusable: false,
     resizable: true,
     skipTaskbar: true,
     webPreferences: {
@@ -29,7 +30,8 @@ const WINDOW_CONFIGS: Record<WindowName, Electron.BrowserWindowConstructorOption
   'post-match': {
     width: 600,
     height: 700,
-    transparent: true,
+    transparent: false,
+    backgroundColor: '#0f0f19',
     frame: false,
     alwaysOnTop: true,
     resizable: true,
@@ -82,10 +84,15 @@ export async function createWindows(): Promise<void> {
       });
     }
 
-    // Position main overlay in top-right
+    // Position main overlay at center-right of screen
+    // (avoids overlapping mini-map, kill feed, and inventory in top-right)
     if (windowName === 'main-overlay') {
-      const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
-      win.setPosition(screenWidth - 330, 10);
+      const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+      const windowWidth = 320;
+      const windowHeight = 480;
+      const x = screenWidth - windowWidth - 10; // 10px from right edge
+      const y = Math.round((screenHeight - windowHeight) / 2); // vertically centered
+      win.setPosition(x, y);
       win.show();
     }
 
@@ -97,11 +104,17 @@ export function getWindow(name: WindowName): BrowserWindow | undefined {
   return windows.get(name);
 }
 
+// Overlay windows (main-overlay) are focusable: false — never call win.focus() on them
+// as it would steal focus from the game and cause the overlay to disappear.
+const NON_FOCUSABLE_WINDOWS: WindowName[] = ['main-overlay'];
+
 export function showWindow(name: WindowName): void {
   const win = windows.get(name);
   if (win && !win.isDestroyed()) {
     win.show();
-    win.focus();
+    if (!NON_FOCUSABLE_WINDOWS.includes(name)) {
+      win.focus();
+    }
   }
 }
 

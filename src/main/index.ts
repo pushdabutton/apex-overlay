@@ -42,6 +42,7 @@ let currentLegend = 'Unknown';
 let currentMap: string | null = null;
 let currentMode: Match['mode'] = 'unknown';
 let matchStartedAt: string | null = null;
+let matchResetTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function bootstrap(): Promise<void> {
   // 1. Initialize SQLite database and run migrations
@@ -87,6 +88,74 @@ async function bootstrap(): Promise<void> {
     handleDomainEvent(event, matchRepo, sessionRepo, legendStatsRepo, dailyAggregateRepo, weaponKillRepo);
   });
 
+  // 8a. Wire ow-electron info update events to renderer IPC broadcasts.
+  // These fire from EventProcessor when it receives key-value info updates
+  // from the real ow-electron GEP (tabs, weapons, player name, etc.)
+  const processor = gepManager.getProcessor();
+
+  processor.on('live-stats', (stats: { kills: number; assists: number; damage: number; teams: number; players: number }) => {
+    broadcastToAll(IPC.LIVE_STATS, stats);
+    // Also broadcast as a MATCH_UPDATE so the existing match store picks it up
+    broadcastToAll(IPC.MATCH_UPDATE, { type: 'live-stats', stats });
+  });
+
+  processor.on('weapons-update', (weapons: Record<string, string>) => {
+    broadcastToAll(IPC.WEAPONS_UPDATE, weapons);
+  });
+
+  processor.on('player-name', (name: string) => {
+    broadcastToAll(IPC.PLAYER_NAME, { name });
+  });
+
+  processor.on('game-mode', (mode: { gameMode: string | null; modeName: string | null }) => {
+    broadcastToAll(IPC.GAME_MODE, mode);
+  });
+
+  processor.on('location-update', (location: { x: number; y: number; z: number }) => {
+    broadcastToAll(IPC.PLAYER_LOCATION, location);
+  });
+
+  processor.on('map-update', (mapName: string) => {
+    currentMap = mapName;
+  });
+
+  // LEGEND-HUNT: Call getInfo() when loading_screen fires.
+  // Legend selection happens BETWEEN lobby and loading_screen.
+  // If legendSelect_X didn't fire as a live event, getInfo() may still
+  // have the data available as a retroactive snapshot.
+  //
+  // If legend is STILL unknown after getInfo(), fall back to the
+  // mozambiquehe.re API which exposes selectedLegend in realtime data.
+  processor.on('raw-phase', (rawPhase: string) => {
+    if (rawPhase === 'loading_screen') {
+      gepManager.getInfo().then(async (snapshot) => {
+        console.log('[LEGEND-HUNT] getInfo() on loading_screen - FULL snapshot:', JSON.stringify(snapshot));
+
+        // If legend is still Unknown after getInfo() processing, try API fallback
+        if (currentLegend === 'Unknown') {
+          const playerName = processor.getPlayerName();
+          if (playerName && apiClient.isConfigured()) {
+            console.log(`[LEGEND-HUNT] Legend still Unknown, trying mozambique API for player: ${playerName}`);
+            try {
+              const apiLegend = await apiClient.getSelectedLegend(playerName);
+              if (apiLegend && currentLegend === 'Unknown') {
+                console.log(`[LEGEND-HUNT] mozambique API selectedLegend: "${apiLegend}"`);
+                currentLegend = apiLegend;
+                broadcastToAll(IPC.MATCH_UPDATE, { type: 'legend', legend: apiLegend });
+              }
+            } catch (err) {
+              console.warn('[LEGEND-HUNT] mozambique API fallback failed:', err);
+            }
+          } else {
+            console.log(`[LEGEND-HUNT] Cannot try API fallback: playerName=${playerName}, apiConfigured=${apiClient.isConfigured()}`);
+          }
+        }
+      }).catch((err) => {
+        console.warn('[LEGEND-HUNT] getInfo() on loading_screen failed:', err);
+      });
+    }
+  });
+
   await gepManager.initialize();
 
   // 9. Start API polling
@@ -106,6 +175,14 @@ function handleDomainEvent(
 ): void {
   switch (event.type) {
     case 'MATCH_START': {
+      console.log('[apex-coach] MATCH_START detected! Mode:', event.mode);
+
+      // Clear any pending post-match reset timer from the previous match
+      if (matchResetTimer !== null) {
+        clearTimeout(matchResetTimer);
+        matchResetTimer = null;
+      }
+
       // Ensure a session exists
       if (currentSessionId === null) {
         currentSessionId = sessionRepo.create();
@@ -123,10 +200,47 @@ function handleDomainEvent(
     }
 
     case 'MATCH_END': {
-      if (currentSessionId !== null && matchStartedAt) {
-        const matchStats = gepManager.getProcessor().getCurrentMatchStats();
-        let matchId: number | null = null;
+      // Grab match stats FIRST, before any resets — this is the data the player needs
+      const matchStats = gepManager.getProcessor().getCurrentMatchStats();
+      console.log('[apex-coach] MATCH_END - matchStats:', JSON.stringify(matchStats));
+      console.log('[apex-coach] MATCH_END - currentLegend:', currentLegend, 'currentMap:', currentMap);
+      console.log('[apex-coach] MATCH_END - sessionId:', currentSessionId, 'matchStartedAt:', matchStartedAt);
 
+      let matchId: number | null = null;
+
+      // ALWAYS broadcast to UI so the player sees their stats,
+      // regardless of session state.  The previous code gated the
+      // broadcast on (currentSessionId && matchStartedAt), which
+      // caused all-zero stats when MATCH_START hadn't created a session.
+      broadcastToAll(IPC.MATCH_END, {
+        matchId: null, // will be updated below if persisted
+        sessionId: currentSessionId,
+        stats: matchStats,
+        legend: currentLegend,
+        map: currentMap,
+        mode: currentMode,
+        timestamp: event.timestamp,
+      });
+
+      // Broadcast cumulative session stats so all renderer windows
+      // (including post-match, which is a separate BrowserWindow with
+      // its own store) can display session averages and comparisons.
+      const sessionStats = gepManager.getProcessor().getSessionStats();
+      broadcastToAll(IPC.SESSION_UPDATE, {
+        totalKills: sessionStats.kills,
+        totalDeaths: sessionStats.deaths,
+        totalAssists: sessionStats.assists,
+        totalDamage: sessionStats.damage,
+        totalHeadshots: sessionStats.headshots,
+        totalKnockdowns: sessionStats.knockdowns,
+        matchesPlayed: sessionStats.matchesPlayed,
+      });
+
+      // Show post-match overlay (always — player should see their screen)
+      showWindow('post-match');
+
+      // Persist to DB and run coaching IF we have a session
+      if (currentSessionId !== null && matchStartedAt) {
         // Persist match data — wrapped in try/catch so a DB failure
         // doesn't kill coaching evaluation or UI updates
         try {
@@ -190,23 +304,18 @@ function handleDomainEvent(
         } catch (err) {
           console.error('[apex-coach] Coaching evaluation failed:', err);
         }
-
-        // Always broadcast to UI so the player sees their stats
-        broadcastToAll(IPC.MATCH_END, {
-          matchId,
-          sessionId: currentSessionId,
-          stats: matchStats,
-          timestamp: event.timestamp,
-        });
-
-        // Show post-match overlay
-        showWindow('post-match');
       }
 
-      // Reset per-match accumulators
-      matchStartedAt = null;
-      currentMap = null;
-      currentMode = 'unknown';
+      // Delay clearing per-match accumulators so the post-match window
+      // has time to receive and render the data. The post-match summary
+      // should remain visible until the next match starts.
+      // Reset is deferred by 30 seconds, or cleared early on next MATCH_START.
+      matchResetTimer = setTimeout(() => {
+        matchStartedAt = null;
+        currentMap = null;
+        currentMode = 'unknown';
+        matchResetTimer = null;
+      }, 30_000);
       break;
     }
 

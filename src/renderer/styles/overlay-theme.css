@@ -5,6 +5,14 @@
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
 }
 
+/* Post-match window: fully opaque background -- BrowserWindow itself is
+   non-transparent, so no game bleeds through at all. */
+.overlay-panel-opaque {
+  background: #0f0f19;
+  @apply rounded-lg border border-overlay-border;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.7);
+}
+
 .overlay-card {
   @apply bg-overlay-card rounded-md border border-overlay-border p-3;
 }
@@ -19,6 +27,14 @@
 
 .overlay-value {
   @apply text-overlay-xl font-bold text-white;
+}
+
+/* Highlighted stat value -- used for primary stats like Kills and Damage.
+   Larger font, gold tint to draw attention without using animation. */
+.overlay-value-highlight {
+  @apply text-overlay-xl font-bold text-apex-gold;
+  font-size: 1.4rem;
+  text-shadow: 0 0 8px rgba(241, 196, 15, 0.25);
 }
 
 .overlay-divider {

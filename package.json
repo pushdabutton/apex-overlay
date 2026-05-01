@@ -5,6 +5,9 @@
   "main": "./out/main/index.js",
   "author": "PureBrain",
   "license": "MIT",
+  "overwolf": {
+    "packages": ["gep"]
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -13,15 +16,17 @@
     "lint": "eslint src/",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "db:migrate": "tsx scripts/migrate.ts"
+    "db:migrate": "tsx scripts/migrate.ts",
+    "rebuild": "npx @electron/rebuild -f -w better-sqlite3"
   },
   "dependencies": {
-    "better-sqlite3": "^11.0.0",
+    "better-sqlite3": "^12.9.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "zustand": "^4.5.0"
   },
   "devDependencies": {
+    "@overwolf/ow-electron-packages-types": "latest",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -30,7 +35,7 @@
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.0",
-    "electron": "^30.0.0",
+    "electron": "npm:@overwolf/ow-electron@^39.6.1",
     "electron-vite": "^2.3.0",
     "eslint": "^9.0.0",
     "jsdom": "^29.0.2",

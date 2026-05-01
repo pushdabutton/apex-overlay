@@ -5,7 +5,7 @@ module.exports = {
     extend: {
       colors: {
         // Apex-inspired dark theme
-        'overlay-bg': 'rgba(15, 15, 20, 0.85)',
+        'overlay-bg': 'rgba(15, 15, 25, 0.92)',
         'overlay-card': 'rgba(25, 25, 35, 0.90)',
         'overlay-border': 'rgba(255, 255, 255, 0.08)',
         'apex-red': '#e74c3c',

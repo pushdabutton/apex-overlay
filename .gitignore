@@ -1,9 +1,13 @@
 node_modules/
 dist/
+out/
 release/
+logs/
 *.sqlite3
 *.sqlite3-journal
 *.sqlite3-wal
 .env
 .env.local
 .vite/
+.idea/
+.claude/settings.local.json

@@ -200,6 +200,44 @@ export class MozambiqueClient {
   }
 
   /**
+   * Fetch the currently selected legend for a player from the API.
+   * Uses the bridge endpoint and extracts realtime.selectedLegend.
+   *
+   * @param playerName - The player's in-game name
+   * @param platform - Platform identifier (default: 'PC')
+   * @returns The legend name (e.g., "Lifeline") or null on error/not found
+   */
+  async getSelectedLegend(playerName: string, platform: string = 'PC'): Promise<string | null> {
+    if (!this.apiKey) return null;
+
+    try {
+      const url = `${BASE_URL}/bridge?player=${encodeURIComponent(playerName)}&platform=${platform}&auth=${this.apiKey}`;
+      const response = await this.fetchWithTimeout(url);
+
+      if (!response.ok) {
+        console.error(`[API] getSelectedLegend fetch failed: ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+      const selectedLegend = data?.global?.legends?.selected?.LegendName
+        ?? data?.realtime?.selectedLegend
+        ?? null;
+
+      if (selectedLegend && typeof selectedLegend === 'string') {
+        console.log(`[LEGEND-HUNT] mozambique API selectedLegend: "${selectedLegend}"`);
+        return selectedLegend;
+      }
+
+      console.log('[LEGEND-HUNT] mozambique API: no selectedLegend in response');
+      return null;
+    } catch (error) {
+      console.error('[API] getSelectedLegend error:', error);
+      return null;
+    }
+  }
+
+  /**
    * Delete player_profile rows older than the given number of days.
    * Keeps the latest profile per player (UPSERT handles that),
    * but this cleans up any stale rows from before the UPSERT fix.

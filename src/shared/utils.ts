@@ -63,3 +63,35 @@ export function nowISO(): string {
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
+
+/**
+ * Clean a GEP legend name by stripping the Apex localization key format.
+ *
+ * Raw GEP sends legend names as localization keys like:
+ *   "#character_wraith_NAME"  -> "Wraith"
+ *   "#character_horizon_NAME" -> "Horizon"
+ *   "#character_mad_maggie_NAME" -> "Mad Maggie"
+ *
+ * Also handles already-clean names (pass-through) and empty/null values.
+ */
+export function cleanLegendName(raw: string): string {
+  if (!raw || raw.length === 0) return 'Unknown';
+
+  // Strip the localization key format: #character_XXXX_NAME
+  // Only strip _NAME suffix if the #character_ prefix was present
+  // (they always appear together in GEP data)
+  let cleaned = raw;
+  if (cleaned.startsWith('#character_')) {
+    cleaned = cleaned.slice('#character_'.length);
+    if (cleaned.endsWith('_NAME')) {
+      cleaned = cleaned.slice(0, -'_NAME'.length);
+    }
+    // Capitalize each word (underscores become spaces)
+    cleaned = cleaned
+      .split('_')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  }
+
+  return cleaned || 'Unknown';
+}

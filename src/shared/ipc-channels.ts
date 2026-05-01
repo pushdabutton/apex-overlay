@@ -14,8 +14,14 @@ export const IPC = {
   API_CRAFTING: 'api:crafting',
   API_PLAYER_PROFILE: 'api:player-profile',
   GAME_PHASE: 'game:phase',
+  LIVE_STATS: 'match:live-stats',
+  WEAPONS_UPDATE: 'match:weapons',
+  PLAYER_NAME: 'player:name',
+  GAME_MODE: 'match:game-mode',
+  PLAYER_LOCATION: 'player:location',
 
   // Renderer -> Main (requests)
+  WINDOW_HIDE: 'window:hide',
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
   SETTINGS_GET_ALL: 'settings:get-all',
