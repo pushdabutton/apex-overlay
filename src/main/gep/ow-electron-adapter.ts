@@ -21,6 +21,7 @@
 
 import type { GEPProvider } from './gep-manager';
 import { APEX_GAME_ID } from '../../shared/constants';
+import { getGEPRawLogger } from './gep-raw-logger';
 
 /**
  * Minimal type declarations for ow-electron's GEP package.
@@ -129,6 +130,8 @@ export class OwElectronGEPAdapter {
           const handler = (_e: unknown, gameId: number, event: unknown): void => {
             // Only forward events for Apex Legends
             if (gameId === APEX_GAME_ID) {
+              // Log raw event BEFORE any processing for debugging
+              getGEPRawLogger().logGameEvent(gameId, event);
               console.log('[ow-electron GEP] Raw game event:', JSON.stringify(event).slice(0, 500));
 
               // Try to extract event name and data from whatever shape arrives.
@@ -160,6 +163,8 @@ export class OwElectronGEPAdapter {
           const handler = (_e: unknown, gameId: number, info: unknown): void => {
             if (gameId !== APEX_GAME_ID) return;
 
+            // Log raw info update BEFORE any processing for debugging
+            getGEPRawLogger().logInfoUpdate(gameId, info);
             console.log('[ow-electron GEP] Raw info update:', JSON.stringify(info).slice(0, 500));
 
             // ow-electron GEP sends individual key-value updates:

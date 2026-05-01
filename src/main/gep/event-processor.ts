@@ -242,6 +242,16 @@ export class EventProcessor extends EventEmitter {
       case 'tabs': {
         // Live match stats from match_info feature
         // value: { kills, assists, teams, players, damage, knockdowns, cash, ... }
+        //
+        // CRITICAL: GEP sends tabs:null after match end to clear post-match data.
+        // If we process null tabs, it resets currentMatch stats to zeros, which
+        // causes the post-match display to show 0 kills / 0 damage even though
+        // the correct data was captured during the match. Skip null tabs entirely.
+        if (value === null || value === undefined) {
+          console.log('[EventProcessor] Ignoring null/undefined tabs update (GEP post-match clear)');
+          return;
+        }
+
         const tabs = typeof value === 'object' && value !== null
           ? (value as Record<string, unknown>)
           : {};
@@ -438,6 +448,7 @@ export class EventProcessor extends EventEmitter {
       case 'legend_select':
       case 'character_name': {
         // Legend selected (may come via me feature with various key names)
+        console.log(`[EventProcessor][LEGEND-DEBUG] Key "${key}" received with value: "${value}" (type: ${typeof value})`);
         if (typeof value === 'string' && value.length > 0) {
           const event: DomainEvent = {
             type: 'LEGEND_SELECTED',
@@ -453,12 +464,14 @@ export class EventProcessor extends EventEmitter {
       case 'me': {
         // The "me" feature bundles player info including legend name.
         // Shape: { name: "...", legendName: "Wraith", ... } or JSON string
+        console.log(`[EventProcessor][LEGEND-DEBUG] "me" key received:`, JSON.stringify(value));
         if (typeof value === 'object' && value !== null) {
           const me = value as Record<string, unknown>;
           const legendFromMe = (me.legendName as string)
             ?? (me.legend as string)
             ?? (me.selected_legend as string)
             ?? (me.character_name as string);
+          console.log(`[EventProcessor][LEGEND-DEBUG] "me" legend extraction: legendName=${me.legendName}, legend=${me.legend}, selected_legend=${me.selected_legend}, character_name=${me.character_name} -> "${legendFromMe}"`);
           if (legendFromMe && typeof legendFromMe === 'string' && legendFromMe.length > 0) {
             const event: DomainEvent = {
               type: 'LEGEND_SELECTED',
@@ -579,12 +592,22 @@ export class EventProcessor extends EventEmitter {
         // Shape: { playerName, legendName, selectionOrder, lead, is_local }
         // Only the entry with is_local=true is the local player's legend.
         if (key.startsWith('legendSelect_')) {
+          // GEP sends legendSelect_X: null at match end to clear — skip it
+          if (value === null || value === undefined) {
+            console.log(`[EventProcessor] Ignoring null ${key} update (GEP post-match clear)`);
+            break;
+          }
           if (typeof value === 'object' && value !== null) {
             const sel = value as Record<string, unknown>;
+            // DEBUG: Log every legendSelect_X update for diagnostic purposes
+            console.log(`[EventProcessor][LEGEND-DEBUG] ${key} received:`, JSON.stringify(sel));
+            console.log(`[EventProcessor][LEGEND-DEBUG] ${key} is_local=${sel.is_local} (type: ${typeof sel.is_local}), legendName=${sel.legendName} (type: ${typeof sel.legendName})`);
             if (sel.is_local === true || sel.is_local === 'true' || sel.is_local === '1' || sel.is_local === 1) {
               const legendRaw = sel.legendName as string;
+              console.log(`[EventProcessor][LEGEND-DEBUG] ${key} IS local player. Raw legendName: "${legendRaw}"`);
               if (legendRaw && typeof legendRaw === 'string' && legendRaw.length > 0) {
                 const cleaned = cleanLegendName(legendRaw);
+                console.log(`[EventProcessor][LEGEND-DEBUG] cleanLegendName("${legendRaw}") -> "${cleaned}"`);
                 console.log(`[EventProcessor] Local legend selected via ${key}: ${legendRaw} -> ${cleaned}`);
                 const event: DomainEvent = {
                   type: 'LEGEND_SELECTED',
@@ -608,11 +631,15 @@ export class EventProcessor extends EventEmitter {
             const isLocal = roster.is_local === true || roster.is_local === 'true'
               || roster.is_local === '1' || roster.is_local === 1;
             if (isLocal) {
+              // DEBUG: Log all fields of the local player's roster entry
+              console.log(`[EventProcessor][LEGEND-DEBUG] ${key} local player roster:`, JSON.stringify(roster));
               const legendRaw = (roster.character_name as string)
                 ?? (roster.legendName as string)
                 ?? (roster.legend as string);
+              console.log(`[EventProcessor][LEGEND-DEBUG] ${key} legend extraction: character_name=${roster.character_name}, legendName=${roster.legendName}, legend=${roster.legend} -> legendRaw="${legendRaw}"`);
               if (legendRaw && typeof legendRaw === 'string' && legendRaw.length > 0) {
                 const cleaned = cleanLegendName(legendRaw);
+                console.log(`[EventProcessor][LEGEND-DEBUG] cleanLegendName("${legendRaw}") -> "${cleaned}"`);
                 console.log(`[EventProcessor] Local legend from roster via ${key}: ${legendRaw} -> ${cleaned}`);
                 const event: DomainEvent = {
                   type: 'LEGEND_SELECTED',

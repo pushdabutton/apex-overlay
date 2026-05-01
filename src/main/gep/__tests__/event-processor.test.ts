@@ -1334,4 +1334,243 @@ describe('EventProcessor', () => {
       expect(session.matchesPlayed).toBe(1);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Bug Fix: tabs:null after match end must NOT reset stats
+  // GEP sends tabs:null to clear post-match data. Without the guard,
+  // this resets currentMatch to zeros and the post-match display shows 0/0.
+  // -----------------------------------------------------------------------
+  describe('tabs null guard (post-match clear)', () => {
+    it('should ignore tabs:null and preserve match stats', () => {
+      const liveStats = vi.fn();
+      processor.on('live-stats', liveStats);
+
+      // Start match and accumulate stats via tabs
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'landed', feature: 'game_info', category: 'game_info' },
+      });
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: 9, assists: 5, damage: 3507, teams: 3, players: 7 },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      const statsDuringMatch = processor.getCurrentMatchStats();
+      expect(statsDuringMatch.kills).toBe(9);
+      expect(statsDuringMatch.damage).toBe(3507);
+
+      // End the match
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'lobby', feature: 'game_info', category: 'game_info' },
+      });
+
+      liveStats.mockClear();
+
+      // GEP sends tabs:null to clear post-match data
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: null,
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      // live-stats should NOT have been emitted for the null tabs
+      expect(liveStats).not.toHaveBeenCalled();
+
+      // Session stats should still reflect the correct match data
+      const session = processor.getSessionStats();
+      expect(session.kills).toBe(9);
+      expect(session.damage).toBe(3507);
+    });
+
+    it('should ignore tabs:undefined and preserve match stats', () => {
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'playing', feature: 'game_info', category: 'game_info' },
+      });
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: 3, assists: 1, damage: 800, teams: 5, players: 12 },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      // End the match
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'lobby', feature: 'game_info', category: 'game_info' },
+      });
+
+      // GEP sends tabs:undefined
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: undefined,
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      const session = processor.getSessionStats();
+      expect(session.kills).toBe(3);
+      expect(session.damage).toBe(800);
+    });
+
+    it('should not reset currentMatch when tabs:null arrives during cooldown', () => {
+      // Start match
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'landed', feature: 'game_info', category: 'game_info' },
+      });
+
+      // Accumulate real stats
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: 5, assists: 2, damage: 1500, teams: 8, players: 20 },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      // End match
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'match_summary', feature: 'game_info', category: 'game_info' },
+      });
+
+      // Stats should be preserved in currentMatch (readable until next match start)
+      const matchAfterEnd = processor.getCurrentMatchStats();
+      expect(matchAfterEnd.kills).toBe(5);
+      expect(matchAfterEnd.damage).toBe(1500);
+
+      // GEP clears tabs with null -- must NOT reset anything
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: null,
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      // Verify stats are still intact
+      const matchAfterNull = processor.getCurrentMatchStats();
+      expect(matchAfterNull.kills).toBe(5);
+      expect(matchAfterNull.damage).toBe(1500);
+    });
+
+    it('should simulate the exact real-world bug scenario: correct stats then null clear', () => {
+      const liveStats = vi.fn();
+      processor.on('live-stats', liveStats);
+
+      // 1. Phase -> landed (match starts)
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'landed', feature: 'game_info', category: 'game_info' },
+      });
+
+      // 2. During match: tabs arrives with correct data multiple times
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: 3, assists: 1, damage: 1200, teams: 10, players: 30 },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: { kills: 9, assists: 5, damage: 3507, teams: 3, players: 7 },
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      // Verify mid-match stats
+      expect(processor.getCurrentMatchStats().kills).toBe(9);
+      expect(processor.getCurrentMatchStats().damage).toBe(3507);
+
+      // 3. Phase -> lobby (match ends)
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'lobby', feature: 'game_info', category: 'game_info' },
+      });
+
+      // 4. GEP clears tabs with null (THE BUG TRIGGER)
+      liveStats.mockClear();
+      processor.processInfoUpdate({
+        info: {
+          key: 'tabs',
+          value: null,
+          feature: 'match_info',
+          category: 'match_info',
+        },
+      });
+
+      // 5. Verify: live-stats was NOT emitted with zeros
+      expect(liveStats).not.toHaveBeenCalled();
+
+      // 6. Verify: session stats are correct (9 kills, 3507 damage)
+      const session = processor.getSessionStats();
+      expect(session.kills).toBe(9);
+      expect(session.damage).toBe(3507);
+      expect(session.assists).toBe(5);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Bug Fix: legendSelect_X:null must NOT crash or clear legend
+  // GEP sends legendSelect_X:null at match end to clear legend data.
+  // -----------------------------------------------------------------------
+  describe('legendSelect null guard', () => {
+    it('should ignore legendSelect_0:null without crashing', () => {
+      // Set a legend first
+      processor.processInfoUpdate({
+        info: {
+          key: 'legendSelect_0',
+          value: {
+            playerName: 'TestPlayer',
+            legendName: 'Wraith',
+            selectionOrder: 1,
+            lead: false,
+            is_local: true,
+          },
+          feature: 'team',
+        },
+      });
+
+      const legends1 = emittedEvents.filter((e) => e.type === 'LEGEND_SELECTED');
+      expect(legends1.length).toBe(1);
+      emittedEvents.length = 0;
+
+      // GEP sends null to clear
+      processor.processInfoUpdate({
+        info: {
+          key: 'legendSelect_0',
+          value: null,
+          feature: 'team',
+        },
+      });
+
+      // Should not emit any new LEGEND_SELECTED and should not crash
+      const legends2 = emittedEvents.filter((e) => e.type === 'LEGEND_SELECTED');
+      expect(legends2.length).toBe(0);
+    });
+
+    it('should ignore legendSelect_1:null and legendSelect_2:null', () => {
+      processor.processInfoUpdate({
+        info: { key: 'legendSelect_1', value: null, feature: 'team' },
+      });
+      processor.processInfoUpdate({
+        info: { key: 'legendSelect_2', value: null, feature: 'team' },
+      });
+
+      // Should not crash and should not emit events
+      const legends = emittedEvents.filter((e) => e.type === 'LEGEND_SELECTED');
+      expect(legends.length).toBe(0);
+    });
+  });
 });
