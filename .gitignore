@@ -10,3 +10,4 @@ logs/
 .env.local
 .vite/
 .idea/
+.claude/settings.local.json
