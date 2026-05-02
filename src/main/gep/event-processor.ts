@@ -402,14 +402,28 @@ export class EventProcessor extends EventEmitter {
 
       case 'weapons': {
         // Equipped weapons: { weapon0: "R-301 Carbine", weapon1: "Alternator SMG" }
+        //
+        // GEP sends weapon slot keys in inconsistent formats across versions:
+        //   - "weapon0" / "weapon1"     (canonical, ow-native documented format)
+        //   - "weapon_0" / "weapon_1"   (ow-electron variant, causes RE-45 "Unknown" bug)
+        //   - "0" / "1"                 (bare numeric, seen in some builds)
+        //
+        // We normalize ALL slot key variants to canonical "weapon0"/"weapon1" so
+        // the kill event fallback and renderer WeaponTracker can reliably access them.
+        // Non-slot keys like "inUse" pass through unchanged.
         if (typeof value === 'object' && value !== null) {
           this.equippedWeapons = {};
           const weapons = value as Record<string, unknown>;
           for (const [slot, weaponName] of Object.entries(weapons)) {
             if (typeof weaponName === 'string' && weaponName.length > 0) {
-              this.equippedWeapons[slot] = weaponName;
+              const normalizedSlot = this.normalizeWeaponSlotKey(slot);
+              if (normalizedSlot !== slot) {
+                console.log(`[EventProcessor][WEAPON-DEBUG] Normalized slot key "${slot}" -> "${normalizedSlot}" (weapon: "${weaponName}")`);
+              }
+              this.equippedWeapons[normalizedSlot] = weaponName;
             }
           }
+          console.log(`[EventProcessor][WEAPON-DEBUG] Equipped weapons: ${JSON.stringify(this.equippedWeapons)}`);
           this.emit('weapons-update', { ...this.equippedWeapons });
         }
         break;
@@ -717,6 +731,28 @@ export class EventProcessor extends EventEmitter {
   }
 
   /**
+   * Normalize a weapon slot key to canonical "weapon0"/"weapon1" format.
+   * GEP sends slot keys in multiple inconsistent formats:
+   *   "weapon0"  -> "weapon0" (already canonical)
+   *   "weapon_0" -> "weapon0" (ow-electron underscore variant)
+   *   "0"        -> "weapon0" (bare numeric variant)
+   * Non-slot keys like "inUse" pass through unchanged.
+   */
+  private normalizeWeaponSlotKey(slot: string): string {
+    // "weapon_0" -> "weapon0", "weapon_1" -> "weapon1"
+    const underscoreMatch = slot.match(/^weapon_(\d+)$/);
+    if (underscoreMatch) {
+      return `weapon${underscoreMatch[1]}`;
+    }
+    // "0" -> "weapon0", "1" -> "weapon1"
+    if (/^\d+$/.test(slot)) {
+      return `weapon${slot}`;
+    }
+    // Already canonical ("weapon0") or non-slot key ("inUse")
+    return slot;
+  }
+
+  /**
    * Safely parse a value to integer, returning 0 for null/undefined/NaN.
    */
   private safeInt(val: unknown): number {
@@ -818,6 +854,7 @@ export class EventProcessor extends EventEmitter {
             ?? this.equippedWeapons['0']
             ?? Object.values(this.equippedWeapons)[0]
             ?? 'Unknown';
+          console.log(`[EventProcessor][WEAPON-DEBUG] Kill event had no weapon data, fell back to equipped: "${killWeapon}" (equipped: ${JSON.stringify(this.equippedWeapons)})`);
         }
         if (killWeapon && killWeapon !== 'Unknown') {
           const existing = this.weaponKills.get(killWeapon) ?? { kills: 0, headshots: 0, damage: 0 };

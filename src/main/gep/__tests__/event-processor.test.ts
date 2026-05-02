@@ -1573,4 +1573,135 @@ describe('EventProcessor', () => {
       expect(legends.length).toBe(0);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Weapon Slot Key Normalization (Bug Fix: RE-45 showing as "Unknown")
+  //
+  // GEP sends weapon slot keys in inconsistent formats across different
+  // game versions and platforms. The handler must normalize ALL variants
+  // to canonical "weapon0"/"weapon1" so the kill event fallback and
+  // renderer can reliably find the equipped weapons.
+  // -----------------------------------------------------------------------
+  describe('weapon slot key normalization', () => {
+    it('should normalize underscore keys (weapon_0 -> weapon0)', () => {
+      const weaponsCallback = vi.fn();
+      processor.on('weapons-update', weaponsCallback);
+
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon_0: 'RE-45 Auto', weapon_1: 'R-301 Carbine' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      const weapons = processor.getEquippedWeapons();
+      expect(weapons).toEqual({
+        weapon0: 'RE-45 Auto',
+        weapon1: 'R-301 Carbine',
+      });
+      expect(weaponsCallback).toHaveBeenCalledWith({
+        weapon0: 'RE-45 Auto',
+        weapon1: 'R-301 Carbine',
+      });
+    });
+
+    it('should normalize bare numeric keys (0 -> weapon0)', () => {
+      const weaponsCallback = vi.fn();
+      processor.on('weapons-update', weaponsCallback);
+
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { '0': 'Flatline', '1': 'Peacekeeper' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      const weapons = processor.getEquippedWeapons();
+      expect(weapons).toEqual({
+        weapon0: 'Flatline',
+        weapon1: 'Peacekeeper',
+      });
+    });
+
+    it('should pass through already-canonical weapon0/weapon1 keys unchanged', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon0: 'Wingman', weapon1: 'Mastiff' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      const weapons = processor.getEquippedWeapons();
+      expect(weapons).toEqual({
+        weapon0: 'Wingman',
+        weapon1: 'Mastiff',
+      });
+    });
+
+    it('should use normalized weapons in kill event weapon fallback', () => {
+      // Setup: send weapons with underscore format
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon_0: 'RE-45 Auto', weapon_1: 'Devotion LMG' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      // Start a match so kills track properly
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'aircraft', feature: 'match_info' },
+      });
+
+      // Send a kill event WITHOUT weapon data (weapon defaults to "Unknown")
+      // The fallback should find the normalized weapon0 = "RE-45 Auto"
+      processor.processRawEvent('kill', JSON.stringify({}));
+
+      const weaponKills = processor.getWeaponKills();
+      const re45Entry = weaponKills.find((w) => w.weapon === 'RE-45 Auto');
+      expect(re45Entry).toBeDefined();
+      expect(re45Entry!.kills).toBe(1);
+    });
+
+    it('should handle mixed key formats (some normalized, some not)', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon0: 'Havoc', weapon_1: 'Triple Take' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      const weapons = processor.getEquippedWeapons();
+      expect(weapons).toEqual({
+        weapon0: 'Havoc',
+        weapon1: 'Triple Take',
+      });
+    });
+
+    it('should handle inUse key alongside slot keys', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon_0: 'RE-45 Auto', weapon_1: 'R-301 Carbine', inUse: 'RE-45 Auto' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      const weapons = processor.getEquippedWeapons();
+      expect(weapons.weapon0).toBe('RE-45 Auto');
+      expect(weapons.weapon1).toBe('R-301 Carbine');
+      // inUse should be preserved as-is (not a slot key)
+      expect(weapons.inUse).toBe('RE-45 Auto');
+    });
+  });
 });

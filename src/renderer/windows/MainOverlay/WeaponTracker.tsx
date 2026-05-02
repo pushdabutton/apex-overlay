@@ -4,8 +4,10 @@ import { useMatchStore } from '../../stores/match-store';
 function WeaponTrackerInner() {
   const weapons = useMatchStore((s) => s.weapons);
 
-  const weapon0 = weapons.weapon0 ?? null;
-  const weapon1 = weapons.weapon1 ?? null;
+  // GEP sends weapon slots in multiple key formats. The main process normalizes
+  // to "weapon0"/"weapon1", but check all variants as defense-in-depth.
+  const weapon0 = weapons.weapon0 ?? weapons.weapon_0 ?? weapons['0'] ?? null;
+  const weapon1 = weapons.weapon1 ?? weapons.weapon_1 ?? weapons['1'] ?? null;
 
   // Hide when no weapons data is available
   if (!weapon0 && !weapon1) return null;
