@@ -17,6 +17,11 @@ export class ApiScheduler {
   private readonly MIN_REQUEST_GAP_MS = 500; // Rate limit: 500ms between requests
   private playerProfileCallbacks: Array<(profile: PlayerProfile) => void> = [];
 
+  // Player name cached from GEP events. When GEP detects the player name,
+  // it is passed here so we can fetch the profile without needing the
+  // settings DB to be pre-populated.
+  private cachedPlayerName: string | null = null;
+
   constructor(client: MozambiqueClient, db: Database.Database) {
     this.client = client;
     this.db = db;
@@ -46,6 +51,9 @@ export class ApiScheduler {
     this.intervals.push(
       setInterval(() => this.fetchCrafting(), API_POLL_INTERVALS.CRAFTING),
     );
+    this.intervals.push(
+      setInterval(() => this.refreshPlayerProfile(), API_POLL_INTERVALS.PLAYER_PROFILE),
+    );
 
     console.log('[ApiScheduler] Polling started');
   }
@@ -60,15 +68,25 @@ export class ApiScheduler {
 
   /**
    * Call this between matches to refresh player profile.
+   * When called with a playerName (e.g., from GEP player-name event),
+   * caches it so subsequent calls (periodic polling) reuse it.
    */
-  async refreshPlayerProfile(): Promise<void> {
+  async refreshPlayerProfile(playerName?: string): Promise<void> {
     await this.rateLimitedFetch(async () => {
-      const playerName = this.getSetting('api.playerName');
+      // Cache GEP-provided name for reuse by periodic polling
+      if (playerName) {
+        this.cachedPlayerName = playerName;
+      }
+
+      // Priority: param > cached GEP name > DB setting
+      const name = this.cachedPlayerName ?? this.getSetting('api.playerName');
       const platform = this.getSetting('api.platform') ?? 'PC';
 
-      if (!playerName) return;
+      if (!name) return;
 
-      const profile = await this.client.fetchPlayerProfile(playerName, platform);
+      console.log(`[ApiScheduler] Fetching player profile for: ${name}`);
+
+      const profile = await this.client.fetchPlayerProfile(name, platform);
       if (profile) {
         broadcastToAll(IPC.API_PLAYER_PROFILE, profile);
         // Notify callbacks (e.g., for rank data extraction)

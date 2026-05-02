@@ -109,6 +109,11 @@ async function bootstrap(): Promise<void> {
 
   processor.on('player-name', (name: string) => {
     broadcastToAll(IPC.PLAYER_NAME, { name });
+    // Trigger API profile fetch using the GEP-detected player name.
+    // This is the primary mechanism for getting rank data -- the
+    // settings DB api.playerName is rarely populated manually, but
+    // GEP always provides the player name.
+    apiScheduler.refreshPlayerProfile(name);
   });
 
   processor.on('game-mode', (mode: { gameMode: string | null; modeName: string | null }) => {

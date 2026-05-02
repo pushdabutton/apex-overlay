@@ -797,7 +797,10 @@ export class EventProcessor extends EventEmitter {
     if (lower.includes('ranked')) return 'ranked';
     if (lower.includes('arena')) return 'arenas';
     if (lower.includes('ltm') || lower.includes('limited')) return 'ltm';
-    if (lower.includes('battle') || lower.includes('br') || lower.includes('trios') || lower.includes('duos')) {
+    // Match both singular and plural: "trio"/"trios", "duo"/"duos",
+    // and GEP localization key formats: "#PL_TRIO", "#PL_DUO"
+    if (lower.includes('battle') || lower.includes('br')
+      || lower.includes('trio') || lower.includes('duo')) {
       return 'battle_royale';
     }
     return 'unknown';
