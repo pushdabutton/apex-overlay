@@ -20,9 +20,16 @@ function SessionTrackerInner() {
     const unsubSession = window.apexCoach.on(IPC.SESSION_UPDATE, (data) => {
       useSessionStore.getState().updateFromIpc(data as Record<string, unknown>);
     });
+    const unsubWeapons = window.apexCoach.on(IPC.WEAPONS_UPDATE, (data) => {
+      useMatchStore.getState().updateFromIpc({
+        type: 'weapons',
+        weapons: data,
+      } as Record<string, unknown>);
+    });
     return () => {
       unsubMatch();
       unsubSession();
+      unsubWeapons();
     };
   }, []);
 

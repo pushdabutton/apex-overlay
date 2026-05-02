@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
 import { SessionTracker } from './SessionTracker';
+import { WeaponTracker } from './WeaponTracker';
 import { MapRotation } from './MapRotation';
 import { RankedProgress } from './RankedProgress';
 import { CoachingAlert } from './CoachingAlert';
@@ -16,6 +17,9 @@ function MainOverlayInner() {
 
       {/* Session stats */}
       <SessionTracker />
+
+      {/* Live weapon display */}
+      <WeaponTracker />
 
       {/* Coaching alerts (toast-style) */}
       <CoachingAlert />

@@ -22,6 +22,9 @@ describe('Match Store', () => {
     expect(state.placement).toBeNull();
     expect(state.map).toBeNull();
     expect(state.coachingInsights).toEqual([]);
+    expect(state.rankName).toBeNull();
+    expect(state.rankScore).toBeNull();
+    expect(state.weapons).toEqual({});
   });
 
   it('setMatchResult stores placement, kills, damage, legend, map, mode', () => {
@@ -104,5 +107,76 @@ describe('Match Store', () => {
     const state = useMatchStore.getState();
     expect(state.coachingInsights).toHaveLength(1);
     expect(state.coachingInsights[0].message).toBe('Your headshot rate dropped 5%');
+  });
+
+  it('updateFromIpc handles rank updates', () => {
+    useMatchStore.getState().updateFromIpc({
+      type: 'rank',
+      rankName: 'Gold II',
+      rankScore: 5000,
+    });
+
+    const state = useMatchStore.getState();
+    expect(state.rankName).toBe('Gold II');
+    expect(state.rankScore).toBe(5000);
+  });
+
+  it('updateFromIpc handles rank update without score', () => {
+    useMatchStore.getState().updateFromIpc({
+      type: 'rank',
+      rankName: 'Platinum III',
+    });
+
+    const state = useMatchStore.getState();
+    expect(state.rankName).toBe('Platinum III');
+    expect(state.rankScore).toBeNull(); // No score provided, stays null
+  });
+
+  it('updateFromIpc handles weapons updates', () => {
+    useMatchStore.getState().updateFromIpc({
+      type: 'weapons',
+      weapons: { weapon0: 'R-301 Carbine', weapon1: 'Peacekeeper' },
+    });
+
+    const state = useMatchStore.getState();
+    expect(state.weapons).toEqual({
+      weapon0: 'R-301 Carbine',
+      weapon1: 'Peacekeeper',
+    });
+  });
+
+  it('updateFromIpc replaces weapons entirely on update', () => {
+    useMatchStore.getState().updateFromIpc({
+      type: 'weapons',
+      weapons: { weapon0: 'R-301 Carbine', weapon1: 'Peacekeeper' },
+    });
+    useMatchStore.getState().updateFromIpc({
+      type: 'weapons',
+      weapons: { weapon0: 'Flatline' },
+    });
+
+    const state = useMatchStore.getState();
+    expect(state.weapons).toEqual({ weapon0: 'Flatline' });
+    // weapon1 is gone because the whole object was replaced
+    expect(state.weapons.weapon1).toBeUndefined();
+  });
+
+  it('resetMatch clears rank and weapons data', () => {
+    useMatchStore.getState().updateFromIpc({
+      type: 'rank',
+      rankName: 'Diamond I',
+      rankScore: 10500,
+    });
+    useMatchStore.getState().updateFromIpc({
+      type: 'weapons',
+      weapons: { weapon0: 'Wingman', weapon1: 'R-99' },
+    });
+
+    useMatchStore.getState().resetMatch();
+
+    const state = useMatchStore.getState();
+    expect(state.rankName).toBeNull();
+    expect(state.rankScore).toBeNull();
+    expect(state.weapons).toEqual({});
   });
 });
