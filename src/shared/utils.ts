@@ -96,6 +96,119 @@ export function cleanLegendName(raw: string): string {
   return cleaned || 'Unknown';
 }
 
+/**
+ * Clean a GEP weapon name by stripping localization key format and normalizing.
+ *
+ * ow-native GEP typically sends clean weapon names ("R-301 Carbine", "RE-45 Auto"),
+ * but ow-electron may occasionally send:
+ *   - Localization keys: "#weapon_re45_auto" -> "RE-45 Auto"
+ *   - Internal names: "weapon_re45_auto" -> "RE-45 Auto"
+ *   - Empty strings or null -> "Unknown"
+ *
+ * Also normalizes known weapon internal names to their display names.
+ */
+export function cleanWeaponName(raw: string | null | undefined): string {
+  if (!raw || (typeof raw === 'string' && raw.trim().length === 0)) return 'Unknown';
+
+  let cleaned = raw.trim();
+
+  // Strip localization key prefix: #weapon_XXX or #weapon_XXX_NAME (case-insensitive)
+  const hashWeaponMatch = cleaned.match(/^#weapon_(.+)$/i);
+  if (hashWeaponMatch) {
+    cleaned = hashWeaponMatch[1];
+    // Also strip _NAME suffix if present (same pattern as legend names)
+    if (/[_]NAME$/i.test(cleaned)) {
+      cleaned = cleaned.replace(/[_]NAME$/i, '');
+    }
+  }
+
+  // Strip plain "weapon_" prefix (internal engine name without #, case-insensitive)
+  if (!hashWeaponMatch) {
+    const plainWeaponMatch = cleaned.match(/^weapon_(.+)$/i);
+    if (plainWeaponMatch) {
+      cleaned = plainWeaponMatch[1];
+    }
+  }
+
+  // Normalize known internal weapon names to display names.
+  // This map covers common Apex weapons where internal names differ
+  // from display names. Keys are lowercase for case-insensitive lookup.
+  const internalToDisplay: Record<string, string> = {
+    // Pistols
+    're45_auto': 'RE-45 Auto',
+    're45': 'RE-45 Auto',
+    'p2020': 'P2020',
+    'wingman': 'Wingman',
+    // SMGs
+    'alternator_smg': 'Alternator SMG',
+    'alternator': 'Alternator SMG',
+    'r99': 'R-99',
+    'r99_smg': 'R-99',
+    'car_smg': 'CAR SMG',
+    'car': 'CAR SMG',
+    'prowler_pdw': 'Prowler Burst PDW',
+    'prowler': 'Prowler Burst PDW',
+    'volt_smg': 'Volt SMG',
+    'volt': 'Volt SMG',
+    // Assault Rifles
+    'r301_carbine': 'R-301 Carbine',
+    'r301': 'R-301 Carbine',
+    'flatline': 'VK-47 Flatline',
+    'vk47_flatline': 'VK-47 Flatline',
+    'hemlok': 'Hemlok Burst AR',
+    'hemlok_burst_ar': 'Hemlok Burst AR',
+    'havoc': 'HAVOC Rifle',
+    'havoc_rifle': 'HAVOC Rifle',
+    'nemesis': 'Nemesis Burst AR',
+    'nemesis_burst_ar': 'Nemesis Burst AR',
+    // LMGs
+    'devotion_lmg': 'Devotion LMG',
+    'devotion': 'Devotion LMG',
+    'spitfire': 'M600 Spitfire',
+    'm600_spitfire': 'M600 Spitfire',
+    'lstar_emg': 'L-STAR EMG',
+    'lstar': 'L-STAR EMG',
+    'rampage_lmg': 'Rampage LMG',
+    'rampage': 'Rampage LMG',
+    // Shotguns
+    'peacekeeper': 'Peacekeeper',
+    'eva8_auto': 'EVA-8 Auto',
+    'eva8': 'EVA-8 Auto',
+    'mozambique_shotgun': 'Mozambique Shotgun',
+    'mozambique': 'Mozambique Shotgun',
+    'mastiff': 'Mastiff Shotgun',
+    'mastiff_shotgun': 'Mastiff Shotgun',
+    // Snipers
+    'longbow_dmr': 'Longbow DMR',
+    'longbow': 'Longbow DMR',
+    'kraber': 'Kraber .50-Cal Sniper',
+    'kraber_50cal': 'Kraber .50-Cal Sniper',
+    'sentinel': 'Sentinel',
+    'charge_rifle': 'Charge Rifle',
+    // Marksman
+    'triple_take': 'Triple Take',
+    'g7_scout': 'G7 Scout',
+    '3030_repeater': '30-30 Repeater',
+    'bocek_bow': 'Bocek Compound Bow',
+    'bocek': 'Bocek Compound Bow',
+    // Special
+    'melee': 'Melee',
+    'grenade': 'Grenade',
+    'thermite_grenade': 'Thermite Grenade',
+    'arc_star': 'Arc Star',
+    'frag_grenade': 'Frag Grenade',
+  };
+
+  const lookupKey = cleaned.toLowerCase();
+  if (internalToDisplay[lookupKey]) {
+    return internalToDisplay[lookupKey];
+  }
+
+  // If it wasn't in the map, return the cleaned string as-is.
+  // It's likely already a display name like "R-301 Carbine".
+  return cleaned || 'Unknown';
+}
+
 // ============================================================
 // Rank Utilities -- Parse rank names and calculate RP progress
 // ============================================================

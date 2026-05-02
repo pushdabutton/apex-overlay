@@ -4,6 +4,7 @@
 
 import type Database from 'better-sqlite3';
 import type { MozambiqueClient } from './mozambique-client';
+import type { PlayerProfile } from '../../shared/types';
 import { API_POLL_INTERVALS } from '../../shared/constants';
 import { broadcastToAll } from '../windows';
 import { IPC } from '../../shared/ipc-channels';
@@ -14,10 +15,19 @@ export class ApiScheduler {
   private intervals: NodeJS.Timeout[] = [];
   private lastRequestTime = 0;
   private readonly MIN_REQUEST_GAP_MS = 500; // Rate limit: 500ms between requests
+  private playerProfileCallbacks: Array<(profile: PlayerProfile) => void> = [];
 
   constructor(client: MozambiqueClient, db: Database.Database) {
     this.client = client;
     this.db = db;
+  }
+
+  /**
+   * Register a callback to be called whenever a player profile is fetched.
+   * Used by main process to extract rank data for the overlay.
+   */
+  onPlayerProfile(callback: (profile: PlayerProfile) => void): void {
+    this.playerProfileCallbacks.push(callback);
   }
 
   async start(): Promise<void> {
@@ -61,6 +71,10 @@ export class ApiScheduler {
       const profile = await this.client.fetchPlayerProfile(playerName, platform);
       if (profile) {
         broadcastToAll(IPC.API_PLAYER_PROFILE, profile);
+        // Notify callbacks (e.g., for rank data extraction)
+        for (const cb of this.playerProfileCallbacks) {
+          try { cb(profile); } catch (e) { console.error('[ApiScheduler] Profile callback error:', e); }
+        }
       }
     });
   }

@@ -26,10 +26,24 @@ function SessionTrackerInner() {
         weapons: data,
       } as Record<string, unknown>);
     });
+    // Listen for API player profile to extract rank data.
+    // GEP's "rank" feature only sends "victory" (true/false) --
+    // the actual rank name and score come from the mozambiquehe.re API.
+    const unsubProfile = window.apexCoach.on(IPC.API_PLAYER_PROFILE, (data) => {
+      const profile = data as Record<string, unknown>;
+      if (profile.rankName && typeof profile.rankName === 'string' && profile.rankName !== 'Unknown') {
+        useMatchStore.getState().updateFromIpc({
+          type: 'rank',
+          rankName: profile.rankName,
+          rankScore: typeof profile.rankScore === 'number' ? profile.rankScore : 0,
+        } as Record<string, unknown>);
+      }
+    });
     return () => {
       unsubMatch();
       unsubSession();
       unsubWeapons();
+      unsubProfile();
     };
   }, []);
 

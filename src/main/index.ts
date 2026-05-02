@@ -158,6 +158,23 @@ async function bootstrap(): Promise<void> {
 
   await gepManager.initialize();
 
+  // 8b. Wire API player profile to rank update pipeline.
+  // GEP's "rank" feature only sends "victory" (true/false) -- it does NOT
+  // send rank name or score as info updates. The only source of rank data
+  // is the mozambiquehe.re API player profile. When a profile arrives,
+  // extract rank data and broadcast as a MATCH_UPDATE with type: 'rank'
+  // so the RankedProgress component can display it.
+  apiScheduler.onPlayerProfile((profile) => {
+    if (profile.rankName && profile.rankName !== 'Unknown') {
+      console.log(`[apex-coach] API rank data: ${profile.rankName} (${profile.rankScore} RP)`);
+      broadcastToAll(IPC.MATCH_UPDATE, {
+        type: 'rank',
+        rankName: profile.rankName,
+        rankScore: profile.rankScore,
+      });
+    }
+  });
+
   // 9. Start API polling
   await apiScheduler.start();
 }

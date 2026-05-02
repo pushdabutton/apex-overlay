@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cleanLegendName, percentChange, formatCompact, kdRatio, parseRankName, getRankInfo, rankColorClass } from '../../src/shared/utils';
+import { cleanLegendName, cleanWeaponName, percentChange, formatCompact, kdRatio, parseRankName, getRankInfo, rankColorClass } from '../../src/shared/utils';
 
 describe('cleanLegendName', () => {
   it('should strip #character_ prefix and _NAME suffix', () => {
@@ -49,6 +49,80 @@ describe('cleanLegendName', () => {
 
   it('should handle three-word legend names', () => {
     expect(cleanLegendName('#character_alter_ego_NAME')).toBe('Alter Ego');
+  });
+});
+
+// ============================================================
+// cleanWeaponName Tests
+// ============================================================
+
+describe('cleanWeaponName', () => {
+  it('should return "Unknown" for null', () => {
+    expect(cleanWeaponName(null)).toBe('Unknown');
+  });
+
+  it('should return "Unknown" for undefined', () => {
+    expect(cleanWeaponName(undefined)).toBe('Unknown');
+  });
+
+  it('should return "Unknown" for empty string', () => {
+    expect(cleanWeaponName('')).toBe('Unknown');
+  });
+
+  it('should return "Unknown" for whitespace-only string', () => {
+    expect(cleanWeaponName('   ')).toBe('Unknown');
+  });
+
+  it('should pass through already-clean display names unchanged', () => {
+    expect(cleanWeaponName('R-301 Carbine')).toBe('R-301 Carbine');
+    expect(cleanWeaponName('RE-45 Auto')).toBe('RE-45 Auto');
+    expect(cleanWeaponName('Peacekeeper')).toBe('Peacekeeper');
+    expect(cleanWeaponName('Wingman')).toBe('Wingman');
+    expect(cleanWeaponName('R-99')).toBe('R-99');
+  });
+
+  it('should strip #weapon_ localization prefix and map to display name', () => {
+    expect(cleanWeaponName('#weapon_re45_auto')).toBe('RE-45 Auto');
+    expect(cleanWeaponName('#weapon_r301_carbine')).toBe('R-301 Carbine');
+    expect(cleanWeaponName('#weapon_alternator_smg')).toBe('Alternator SMG');
+  });
+
+  it('should strip #weapon_ prefix with _NAME suffix', () => {
+    expect(cleanWeaponName('#weapon_re45_auto_NAME')).toBe('RE-45 Auto');
+    expect(cleanWeaponName('#weapon_peacekeeper_NAME')).toBe('Peacekeeper');
+  });
+
+  it('should strip plain weapon_ prefix (internal engine name)', () => {
+    expect(cleanWeaponName('weapon_re45_auto')).toBe('RE-45 Auto');
+    expect(cleanWeaponName('weapon_r301_carbine')).toBe('R-301 Carbine');
+  });
+
+  it('should handle case-insensitive localization keys', () => {
+    expect(cleanWeaponName('#WEAPON_RE45_AUTO')).toBe('RE-45 Auto');
+    expect(cleanWeaponName('#Weapon_R301_Carbine')).toBe('R-301 Carbine');
+  });
+
+  it('should map known internal names to display names', () => {
+    expect(cleanWeaponName('re45')).toBe('RE-45 Auto');
+    expect(cleanWeaponName('r301')).toBe('R-301 Carbine');
+    expect(cleanWeaponName('flatline')).toBe('VK-47 Flatline');
+    expect(cleanWeaponName('car')).toBe('CAR SMG');
+    expect(cleanWeaponName('mastiff')).toBe('Mastiff Shotgun');
+    expect(cleanWeaponName('kraber')).toBe('Kraber .50-Cal Sniper');
+    expect(cleanWeaponName('eva8')).toBe('EVA-8 Auto');
+    expect(cleanWeaponName('longbow')).toBe('Longbow DMR');
+    expect(cleanWeaponName('sentinel')).toBe('Sentinel');
+  });
+
+  it('should handle Melee as a special weapon', () => {
+    expect(cleanWeaponName('melee')).toBe('Melee');
+    expect(cleanWeaponName('Melee')).toBe('Melee');
+  });
+
+  it('should pass through unknown weapon names as-is', () => {
+    // An unknown weapon that doesn't match any pattern should pass through
+    expect(cleanWeaponName('Nemesis Burst AR')).toBe('Nemesis Burst AR');
+    expect(cleanWeaponName('SomeNewWeapon')).toBe('SomeNewWeapon');
   });
 });
 
