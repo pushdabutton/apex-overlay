@@ -29,7 +29,7 @@ export const GEP_REQUIRED_FEATURES: string[] = [
   'kill_feed',
 ];
 
-// All legends as of Season 20
+// All legends as of Season 24
 export const LEGENDS = [
   'Alter',
   'Ash',
@@ -53,6 +53,7 @@ export const LEGENDS = [
   'Rampart',
   'Revenant',
   'Seer',
+  'Sparrow',
   'Valkyrie',
   'Vantage',
   'Wattson',
