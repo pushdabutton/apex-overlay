@@ -6,6 +6,10 @@
 // ============================================================
 
 import { app, BrowserWindow } from 'electron';
+import { config as loadEnv } from 'dotenv';
+
+// Load .env from project root (API keys, etc.)
+loadEnv();
 
 // GPU fallback for Linux/WSL where hardware GPU may not be available.
 // Must be set before app.whenReady().

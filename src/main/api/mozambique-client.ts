@@ -35,6 +35,10 @@ export class MozambiqueClient {
       // Settings table may not exist yet during first run
       this.apiKey = null;
     }
+    // Fallback: check environment variable if DB has no key
+    if (!this.apiKey && process.env.MOZAMBIQUE_API_KEY) {
+      this.apiKey = process.env.MOZAMBIQUE_API_KEY;
+    }
   }
 
   setApiKey(key: string): void {
