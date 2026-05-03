@@ -337,6 +337,14 @@ function handleDomainEvent(
         }
       }
 
+      // Refresh rank data after a delay. The mozambiquehe.re API caches
+      // player data, so we wait 15 seconds to give it time to update with
+      // the new RP from the match that just ended. skipCache=true bypasses
+      // our in-memory cache to ensure we get fresh data from the API.
+      setTimeout(() => {
+        apiScheduler.refreshPlayerProfile(undefined, true);
+      }, 15_000);
+
       // Delay clearing per-match accumulators so the post-match window
       // has time to receive and render the data. The post-match summary
       // should remain visible until the next match starts.

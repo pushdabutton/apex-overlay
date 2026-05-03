@@ -50,14 +50,26 @@ export class MozambiqueClient {
   }
 
   /**
-   * Fetch player profile and stats.
+   * Clear the in-memory profile cache for a specific player.
+   * Useful after a match ends to force a fresh fetch.
    */
-  async fetchPlayerProfile(playerName: string, platform: string): Promise<PlayerProfile | null> {
+  clearProfileCache(playerName: string, platform: string): void {
+    const cacheKey = `profile:${platform}:${playerName}`;
+    this.cache.delete(cacheKey);
+  }
+
+  /**
+   * Fetch player profile and stats.
+   * @param skipCache - If true, bypass the in-memory cache and fetch fresh data from the API.
+   */
+  async fetchPlayerProfile(playerName: string, platform: string, skipCache?: boolean): Promise<PlayerProfile | null> {
     if (!this.apiKey) return null;
 
     const cacheKey = `profile:${platform}:${playerName}`;
-    const cached = this.getFromCache<PlayerProfile>(cacheKey);
-    if (cached) return cached;
+    if (!skipCache) {
+      const cached = this.getFromCache<PlayerProfile>(cacheKey);
+      if (cached) return cached;
+    }
 
     try {
       const url = `${BASE_URL}/bridge?player=${encodeURIComponent(playerName)}&platform=${platform}&auth=${this.apiKey}`;

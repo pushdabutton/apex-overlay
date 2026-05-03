@@ -70,8 +70,12 @@ export class ApiScheduler {
    * Call this between matches to refresh player profile.
    * When called with a playerName (e.g., from GEP player-name event),
    * caches it so subsequent calls (periodic polling) reuse it.
+   *
+   * @param playerName - Optional player name (from GEP). Cached for reuse.
+   * @param skipCache - If true, bypasses the in-memory cache to get fresh API data.
+   *                    Used after match end to pick up RP changes immediately.
    */
-  async refreshPlayerProfile(playerName?: string): Promise<void> {
+  async refreshPlayerProfile(playerName?: string, skipCache?: boolean): Promise<void> {
     await this.rateLimitedFetch(async () => {
       // Cache GEP-provided name for reuse by periodic polling
       if (playerName) {
@@ -86,7 +90,9 @@ export class ApiScheduler {
 
       console.log(`[ApiScheduler] Fetching player profile for: ${name}`);
 
-      const profile = await this.client.fetchPlayerProfile(name, platform);
+      const profile = skipCache
+        ? await this.client.fetchPlayerProfile(name, platform, true)
+        : await this.client.fetchPlayerProfile(name, platform);
       if (profile) {
         broadcastToAll(IPC.API_PLAYER_PROFILE, profile);
         // Notify callbacks (e.g., for rank data extraction)
