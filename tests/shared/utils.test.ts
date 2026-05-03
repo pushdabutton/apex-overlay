@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cleanLegendName, cleanWeaponName, percentChange, formatCompact, kdRatio, parseRankName, getRankInfo, rankColorClass } from '../../src/shared/utils';
+import { cleanLegendName, cleanWeaponName, percentChange, formatCompact, kdRatio, parseRankName, getRankInfo, rankColorClass, formatRankName } from '../../src/shared/utils';
 
 describe('cleanLegendName', () => {
   it('should strip #character_ prefix and _NAME suffix', () => {
@@ -201,25 +201,25 @@ describe('parseRankName', () => {
 });
 
 describe('getRankInfo', () => {
-  // Tier RP floors (cumulative):
+  // Tier RP floors (cumulative, Season 24):
   // Rookie: 0 (4 divs x 250 = 1000 total)
-  // Bronze: 1000 (4 divs x 300 = 1200 total)
-  // Silver: 2200 (4 divs x 400 = 1600 total)
-  // Gold: 3800 (4 divs x 500 = 2000 total)
-  // Platinum: 5800 (4 divs x 600 = 2400 total)
-  // Diamond: 8200 (4 divs x 700 = 2800 total)
-  // Master: 11000
-  // Predator: 11000
+  // Bronze: 1000 (4 divs x 500 = 2000 total)
+  // Silver: 3000 (4 divs x 600 = 2400 total)
+  // Gold: 5400 (4 divs x 700 = 2800 total)
+  // Platinum: 8200 (4 divs x 800 = 3200 total)
+  // Diamond: 11400 (4 divs x 900 = 3600 total)
+  // Master: 15000
+  // Predator: 15000
 
   it('should calculate Gold II info correctly', () => {
-    // Gold tier floor = 3800
-    // Gold IV = 3800-4299, III = 4300-4799, II = 4800-5299, I = 5300-5799
-    const info = getRankInfo('Gold II', 5000);
+    // Gold tier floor = 5400
+    // Gold IV = 5400-6099, III = 6100-6799, II = 6800-7499, I = 7500-8199
+    const info = getRankInfo('Gold II', 7339);
     expect(info).not.toBeNull();
     expect(info!.tierName).toBe('Gold');
     expect(info!.division).toBe(2);
-    expect(info!.divisionFloor).toBe(4800);
-    expect(info!.divisionCeiling).toBe(5300);
+    expect(info!.divisionFloor).toBe(6800);
+    expect(info!.divisionCeiling).toBe(7500);
     expect(info!.tierColor).toBe('#ffd700');
   });
 
@@ -234,20 +234,20 @@ describe('getRankInfo', () => {
 
   it('should calculate Bronze I correctly', () => {
     // Bronze tier floor = 1000
-    // Bronze IV = 1000-1299, III = 1300-1599, II = 1600-1899, I = 1900-2199
-    const info = getRankInfo('Bronze I', 2000);
+    // Bronze IV = 1000-1499, III = 1500-1999, II = 2000-2499, I = 2500-2999
+    const info = getRankInfo('Bronze I', 2600);
     expect(info).not.toBeNull();
-    expect(info!.divisionFloor).toBe(1900);
-    expect(info!.divisionCeiling).toBe(2200);
+    expect(info!.divisionFloor).toBe(2500);
+    expect(info!.divisionCeiling).toBe(3000);
     expect(info!.tierColor).toBe('#cd7f32');
   });
 
   it('should return null ceiling for Master', () => {
-    const info = getRankInfo('Master', 15000);
+    const info = getRankInfo('Master', 18000);
     expect(info).not.toBeNull();
     expect(info!.tierName).toBe('Master');
     expect(info!.divisionCeiling).toBeNull();
-    expect(info!.divisionFloor).toBe(11000);
+    expect(info!.divisionFloor).toBe(15000);
     expect(info!.tierColor).toBe('#9b59b6');
   });
 
@@ -265,6 +265,21 @@ describe('getRankInfo', () => {
 
   it('should return null for empty rank name', () => {
     expect(getRankInfo('', 5000)).toBeNull();
+  });
+
+  it('should calculate Alex real-world scenario: Gold II at 7339 RP', () => {
+    // Regression test: Alex is Gold II with 7339 RP. The overlay must show
+    // Gold II with a progress bar from 6800 to 7500, not Gold I with a maxed bar.
+    const info = getRankInfo('Gold II', 7339);
+    expect(info).not.toBeNull();
+    expect(info!.tierName).toBe('Gold');
+    expect(info!.division).toBe(2);
+    expect(info!.divisionFloor).toBe(6800);
+    expect(info!.divisionCeiling).toBe(7500);
+    // Progress: (7339 - 6800) / (7500 - 6800) = 539/700 = ~77%
+    const progress = (7339 - info!.divisionFloor) / (info!.divisionCeiling! - info!.divisionFloor);
+    expect(progress).toBeGreaterThan(0.7);
+    expect(progress).toBeLessThan(0.8);
   });
 });
 
@@ -290,5 +305,48 @@ describe('rankColorClass', () => {
 
   it('should return fallback for unknown tier', () => {
     expect(rankColorClass('Unknown')).toBe('text-white/50');
+  });
+});
+
+describe('formatRankName', () => {
+  it('should combine tier and division into "Gold II" format', () => {
+    expect(formatRankName('Gold', 2)).toBe('Gold II');
+  });
+
+  it('should format all four divisions correctly', () => {
+    expect(formatRankName('Silver', 4)).toBe('Silver IV');
+    expect(formatRankName('Silver', 3)).toBe('Silver III');
+    expect(formatRankName('Silver', 2)).toBe('Silver II');
+    expect(formatRankName('Silver', 1)).toBe('Silver I');
+  });
+
+  it('should return just tier name for Master', () => {
+    expect(formatRankName('Master', 0)).toBe('Master');
+    expect(formatRankName('Master', 1)).toBe('Master');
+  });
+
+  it('should return just tier name for Predator', () => {
+    expect(formatRankName('Predator', 0)).toBe('Predator');
+  });
+
+  it('should normalize case of tier name', () => {
+    expect(formatRankName('gold', 2)).toBe('Gold II');
+    expect(formatRankName('GOLD', 2)).toBe('Gold II');
+  });
+
+  it('should return tier only when division is 0 or missing', () => {
+    expect(formatRankName('Gold', 0)).toBe('Gold');
+    expect(formatRankName('Bronze', -1)).toBe('Bronze');
+    expect(formatRankName('Platinum', 5)).toBe('Platinum');
+  });
+
+  it('should return "Unknown" for empty tier name', () => {
+    expect(formatRankName('', 2)).toBe('Unknown');
+    expect(formatRankName('  ', 2)).toBe('Unknown');
+  });
+
+  it('should handle the real-world API response: Gold div 2 -> "Gold II"', () => {
+    // This is exactly what the mozambiquehe.re API returns for Alex
+    expect(formatRankName('Gold', 2)).toBe('Gold II');
   });
 });

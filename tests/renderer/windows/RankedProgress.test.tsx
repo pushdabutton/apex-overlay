@@ -40,23 +40,24 @@ describe('RankedProgress', () => {
   });
 
   it('renders rank name and RP when data is available', () => {
+    // Gold II range: 6800-7499 (Season 24 thresholds)
     useMatchStore.getState().updateFromIpc({
       type: 'rank',
       rankName: 'Gold II',
-      rankScore: 5000,
+      rankScore: 7339,
     });
 
     render(<RankedProgress />);
     expect(screen.getByText('Ranked')).toBeDefined();
     expect(screen.getByText('Gold II')).toBeDefined();
-    expect(screen.getByText(/5.*RP/)).toBeDefined();
+    expect(screen.getByText(/7\.3K.*RP/)).toBeDefined();
   });
 
   it('renders Gold color class for Gold tier', () => {
     useMatchStore.getState().updateFromIpc({
       type: 'rank',
       rankName: 'Gold II',
-      rankScore: 5000,
+      rankScore: 7339,
     });
 
     render(<RankedProgress />);
@@ -65,10 +66,11 @@ describe('RankedProgress', () => {
   });
 
   it('renders progress bar for ranked tiers with divisions', () => {
+    // Silver III range: 3600-4199 (Season 24 thresholds)
     useMatchStore.getState().updateFromIpc({
       type: 'rank',
       rankName: 'Silver III',
-      rankScore: 2800,
+      rankScore: 3800,
     });
 
     const { container } = render(<RankedProgress />);
@@ -81,12 +83,12 @@ describe('RankedProgress', () => {
     useMatchStore.getState().updateFromIpc({
       type: 'rank',
       rankName: 'Master',
-      rankScore: 15000,
+      rankScore: 18000,
     });
 
     render(<RankedProgress />);
     expect(screen.getByText('Master')).toBeDefined();
-    expect(screen.getByText('15000 RP total')).toBeDefined();
+    expect(screen.getByText('18000 RP total')).toBeDefined();
   });
 
   it('renders Predator without progress bar', () => {

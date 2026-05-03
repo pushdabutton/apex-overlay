@@ -34,7 +34,7 @@ import { WeaponKillRepository } from './db/repositories/weapon-kill-repo';
 import { IPC } from '../shared/ipc-channels';
 import { CoachingRepository } from './db/repositories/coaching-repo';
 import type { DomainEvent, Match } from '../shared/types';
-import { nowISO } from '../shared/utils';
+import { nowISO, formatRankName } from '../shared/utils';
 
 let gepManager: GEPManager;
 let coachingEngine: CoachingEngine;
@@ -175,10 +175,15 @@ async function bootstrap(): Promise<void> {
   // so the RankedProgress component can display it.
   apiScheduler.onPlayerProfile((profile) => {
     if (profile.rankName && profile.rankName !== 'Unknown') {
-      console.log(`[apex-coach] API rank data: ${profile.rankName} (${profile.rankScore} RP)`);
+      // The API returns rankName as just the tier ("Gold") and rankDivision
+      // as a number (2 = Division II). Combine them into "Gold II" format
+      // so parseRankName() + getRankInfo() can calculate the correct
+      // division floor/ceiling for the progress bar.
+      const fullRankName = formatRankName(profile.rankName, profile.rankDivision);
+      console.log(`[apex-coach] API rank data: ${fullRankName} (${profile.rankScore} RP, div ${profile.rankDivision})`);
       broadcastToAll(IPC.MATCH_UPDATE, {
         type: 'rank',
-        rankName: profile.rankName,
+        rankName: fullRankName,
         rankScore: profile.rankScore,
       });
     }

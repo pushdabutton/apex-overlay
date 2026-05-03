@@ -63,16 +63,17 @@ export const LEGENDS = [
 export type LegendName = (typeof LEGENDS)[number];
 
 // Rank tiers and RP thresholds
-// NOTE: Ranked RP thresholds are approximate and may change each season.
-// Last verified: Season 20 (2025). Check Apex patch notes for updates.
-// The mozambiquehe.re API /predator endpoint has live threshold data.
+// Last verified: Season 24 (2026). Cross-validated with mozambiquehe.re API data.
+// Sources: overboost.pro, gametree.me, eloboss.net -- all agree on these values.
+// Validation: Alex = Gold II at 7339 RP -> Gold II floor 6800, ceiling 7500. Correct.
+// The mozambiquehe.re API /predator endpoint has live predator threshold data.
 export const RANK_TIERS = [
   { name: 'Rookie', divisions: 4, rpPerDivision: 250, color: '#808080' },
-  { name: 'Bronze', divisions: 4, rpPerDivision: 300, color: '#cd7f32' },
-  { name: 'Silver', divisions: 4, rpPerDivision: 400, color: '#c0c0c0' },
-  { name: 'Gold', divisions: 4, rpPerDivision: 500, color: '#ffd700' },
-  { name: 'Platinum', divisions: 4, rpPerDivision: 600, color: '#00ced1' },
-  { name: 'Diamond', divisions: 4, rpPerDivision: 700, color: '#00bfff' },
+  { name: 'Bronze', divisions: 4, rpPerDivision: 500, color: '#cd7f32' },
+  { name: 'Silver', divisions: 4, rpPerDivision: 600, color: '#c0c0c0' },
+  { name: 'Gold', divisions: 4, rpPerDivision: 700, color: '#ffd700' },
+  { name: 'Platinum', divisions: 4, rpPerDivision: 800, color: '#00ced1' },
+  { name: 'Diamond', divisions: 4, rpPerDivision: 900, color: '#00bfff' },
   { name: 'Master', divisions: 1, rpPerDivision: null, color: '#9b59b6' },
   { name: 'Predator', divisions: 1, rpPerDivision: null, color: '#e74c3c' },
 ] as const;

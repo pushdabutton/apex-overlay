@@ -110,15 +110,16 @@ describe('Match Store', () => {
   });
 
   it('updateFromIpc handles rank updates', () => {
+    // Gold II range: 6800-7499 (Season 24 thresholds)
     useMatchStore.getState().updateFromIpc({
       type: 'rank',
       rankName: 'Gold II',
-      rankScore: 5000,
+      rankScore: 7339,
     });
 
     const state = useMatchStore.getState();
     expect(state.rankName).toBe('Gold II');
-    expect(state.rankScore).toBe(5000);
+    expect(state.rankScore).toBe(7339);
   });
 
   it('updateFromIpc handles rank update without score', () => {

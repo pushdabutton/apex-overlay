@@ -215,6 +215,35 @@ export function cleanWeaponName(raw: string | null | undefined): string {
 
 import { RANK_TIERS } from './constants';
 
+const DIVISION_ROMAN: Record<number, string> = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV' };
+
+/**
+ * Build a full rank display name from a tier name and division number.
+ *
+ * The mozambiquehe.re API returns rankName as just the tier ("Gold") and
+ * rankDiv as a number (2 = Division II). This function combines them into
+ * the format our UI expects: "Gold II".
+ *
+ * Master and Predator have no divisions, so they return just the tier name.
+ *
+ * @param tierName  The tier name from the API (e.g., "Gold", "Master")
+ * @param division  The division number (1-4, where 4 is lowest/entry)
+ * @returns Full rank name (e.g., "Gold II", "Master")
+ */
+export function formatRankName(tierName: string, division: number): string {
+  if (!tierName || tierName.trim().length === 0) return 'Unknown';
+
+  const normalized = tierName.charAt(0).toUpperCase() + tierName.slice(1).toLowerCase();
+
+  // Master and Predator have no divisions
+  if (normalized === 'Master' || normalized === 'Predator') return normalized;
+
+  // Division 0 or missing means API didn't provide it -- return tier only
+  if (!division || division < 1 || division > 4) return normalized;
+
+  return `${normalized} ${DIVISION_ROMAN[division]}`;
+}
+
 export interface RankInfo {
   tierName: string;
   division: number;

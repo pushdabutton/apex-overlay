@@ -57,7 +57,7 @@ describe('SessionTracker weapons IPC wiring', () => {
     bridge.emit(IPC.MATCH_UPDATE, {
       type: 'rank',
       rankName: 'Gold II',
-      rankScore: 5000,
+      rankScore: 7339,
     });
 
     bridge.emit(IPC.WEAPONS_UPDATE, {
@@ -66,8 +66,66 @@ describe('SessionTracker weapons IPC wiring', () => {
 
     const state = useMatchStore.getState();
     expect(state.rankName).toBe('Gold II');
-    expect(state.rankScore).toBe(5000);
+    expect(state.rankScore).toBe(7339);
     expect(state.weapons).toEqual({ weapon0: 'Wingman' });
+  });
+
+  it('formats rank name with division when API_PLAYER_PROFILE fires', () => {
+    render(<SessionTracker />);
+
+    // Simulate API profile arriving with tier-only rankName and rankDivision
+    // The mozambiquehe.re API returns rankName: "Gold" and rankDiv: 2
+    bridge.emit(IPC.API_PLAYER_PROFILE, {
+      rankName: 'Gold',
+      rankScore: 7339,
+      rankDivision: 2,
+      platform: 'PC',
+      playerName: 'TestPlayer',
+      uid: '123',
+      level: 500,
+    });
+
+    const state = useMatchStore.getState();
+    // Should be formatted as "Gold II", not just "Gold"
+    expect(state.rankName).toBe('Gold II');
+    expect(state.rankScore).toBe(7339);
+  });
+
+  it('handles Master rank (no division) from API_PLAYER_PROFILE', () => {
+    render(<SessionTracker />);
+
+    bridge.emit(IPC.API_PLAYER_PROFILE, {
+      rankName: 'Master',
+      rankScore: 18000,
+      rankDivision: 0,
+      platform: 'PC',
+      playerName: 'TestPlayer',
+      uid: '123',
+      level: 500,
+    });
+
+    const state = useMatchStore.getState();
+    expect(state.rankName).toBe('Master');
+    expect(state.rankScore).toBe(18000);
+  });
+
+  it('handles missing rankDivision in API_PLAYER_PROFILE gracefully', () => {
+    render(<SessionTracker />);
+
+    // Some edge case where rankDivision is not provided
+    bridge.emit(IPC.API_PLAYER_PROFILE, {
+      rankName: 'Platinum',
+      rankScore: 9000,
+      platform: 'PC',
+      playerName: 'TestPlayer',
+      uid: '123',
+      level: 500,
+    });
+
+    const state = useMatchStore.getState();
+    // Without division, should default to tier-only
+    expect(state.rankName).toBe('Platinum');
+    expect(state.rankScore).toBe(9000);
   });
 
   it('cleans up weapons subscription on unmount', () => {
