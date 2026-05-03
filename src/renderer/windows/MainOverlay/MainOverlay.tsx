@@ -1,10 +1,8 @@
 import React, { memo } from 'react';
 import { SessionTracker } from './SessionTracker';
 import { WeaponTracker } from './WeaponTracker';
-import { MapRotation } from './MapRotation';
 import { RankedProgress } from './RankedProgress';
 import { CoachingAlert } from './CoachingAlert';
-import { CraftingRotation } from '../../components/CraftingRotation';
 
 function MainOverlayInner() {
   return (
@@ -24,14 +22,8 @@ function MainOverlayInner() {
       {/* Coaching alerts (toast-style) */}
       <CoachingAlert />
 
-      {/* Map rotation */}
-      <MapRotation />
-
       {/* Ranked progress (if in ranked) */}
       <RankedProgress />
-
-      {/* Crafting rotation (compact) */}
-      <CraftingRotation items={[]} compact />
     </div>
   );
 }
