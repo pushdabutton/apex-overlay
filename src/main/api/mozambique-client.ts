@@ -68,7 +68,8 @@ export class MozambiqueClient {
         return null;
       }
 
-      const data = await response.json();
+      const data = await this.safeParseJson(response, 'Player profile') as any;
+      if (!data) return null;
 
       const profile: PlayerProfile = {
         platform,
@@ -133,7 +134,8 @@ export class MozambiqueClient {
         return null;
       }
 
-      const data = await response.json();
+      const data = await this.safeParseJson(response, 'Map rotation') as any;
+      if (!data) return null;
 
       const rotation: MapRotation = {
         current: {
@@ -174,7 +176,8 @@ export class MozambiqueClient {
         return null;
       }
 
-      const data = await response.json();
+      const data = await this.safeParseJson(response, 'Crafting') as any;
+      if (!data) return null;
 
       // Flatten the crafting rotation into a simple item list
       const items: CraftingItem[] = [];
@@ -223,7 +226,8 @@ export class MozambiqueClient {
         return null;
       }
 
-      const data = await response.json();
+      const data = await this.safeParseJson(response, 'Selected legend') as any;
+      if (!data) return null;
       const selectedLegend = data?.global?.legends?.selected?.LegendName
         ?? data?.realtime?.selectedLegend
         ?? null;
@@ -258,6 +262,20 @@ export class MozambiqueClient {
   }
 
   // --- Network helpers ---
+
+  /**
+   * Safely parse a response as JSON. The mozambiquehe.re API sometimes returns
+   * error strings (e.g. "Error:Could not...") with a 200 status. This catches
+   * those cases instead of throwing a SyntaxError.
+   */
+  private async safeParseJson(response: Response, label: string): Promise<unknown | null> {
+    const text = await response.text();
+    if (!text || (!text.startsWith('[') && !text.startsWith('{'))) {
+      console.warn(`[API] ${label} returned non-JSON: ${text.slice(0, 80)}`);
+      return null;
+    }
+    return JSON.parse(text);
+  }
 
   /**
    * fetch() wrapper with an AbortController timeout (default 10s).
