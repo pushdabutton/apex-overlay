@@ -201,25 +201,25 @@ describe('parseRankName', () => {
 });
 
 describe('getRankInfo', () => {
-  // Tier RP floors (cumulative, Season 24):
+  // Tier RP floors (cumulative, calibrated from in-game screenshot):
   // Rookie: 0 (4 divs x 250 = 1000 total)
   // Bronze: 1000 (4 divs x 500 = 2000 total)
-  // Silver: 3000 (4 divs x 600 = 2400 total)
-  // Gold: 5400 (4 divs x 700 = 2800 total)
-  // Platinum: 8200 (4 divs x 800 = 3200 total)
-  // Diamond: 11400 (4 divs x 900 = 3600 total)
-  // Master: 15000
-  // Predator: 15000
+  // Silver: 3000 (4 divs x 625 = 2500 total)
+  // Gold: 5500 (4 divs x 750 = 3000 total)
+  // Platinum: 8500 (4 divs x 875 = 3500 total)
+  // Diamond: 12000 (4 divs x 1000 = 4000 total)
+  // Master: 16000
+  // Predator: 16000
 
   it('should calculate Gold II info correctly', () => {
-    // Gold tier floor = 5400
-    // Gold IV = 5400-6099, III = 6100-6799, II = 6800-7499, I = 7500-8199
+    // Gold tier floor = 5500
+    // Gold IV = 5500-6249, III = 6250-6999, II = 7000-7749, I = 7750-8499
     const info = getRankInfo('Gold II', 7339);
     expect(info).not.toBeNull();
     expect(info!.tierName).toBe('Gold');
     expect(info!.division).toBe(2);
-    expect(info!.divisionFloor).toBe(6800);
-    expect(info!.divisionCeiling).toBe(7500);
+    expect(info!.divisionFloor).toBe(7000);
+    expect(info!.divisionCeiling).toBe(7750);
     expect(info!.tierColor).toBe('#ffd700');
   });
 
@@ -242,12 +242,23 @@ describe('getRankInfo', () => {
     expect(info!.tierColor).toBe('#cd7f32');
   });
 
+  it('should calculate Silver III correctly', () => {
+    // Silver tier floor = 3000, 625/div
+    // Silver IV = 3000-3624, III = 3625-4249, II = 4250-4874, I = 4875-5499
+    const info = getRankInfo('Silver III', 3800);
+    expect(info).not.toBeNull();
+    expect(info!.tierName).toBe('Silver');
+    expect(info!.division).toBe(3);
+    expect(info!.divisionFloor).toBe(3625);
+    expect(info!.divisionCeiling).toBe(4250);
+  });
+
   it('should return null ceiling for Master', () => {
     const info = getRankInfo('Master', 18000);
     expect(info).not.toBeNull();
     expect(info!.tierName).toBe('Master');
     expect(info!.divisionCeiling).toBeNull();
-    expect(info!.divisionFloor).toBe(15000);
+    expect(info!.divisionFloor).toBe(16000);
     expect(info!.tierColor).toBe('#9b59b6');
   });
 
@@ -268,18 +279,20 @@ describe('getRankInfo', () => {
   });
 
   it('should calculate Alex real-world scenario: Gold II at 7339 RP', () => {
-    // Regression test: Alex is Gold II with 7339 RP. The overlay must show
-    // Gold II with a progress bar from 6800 to 7500, not Gold I with a maxed bar.
+    // Regression test: Alex is Gold II with 339/750 RP shown in-game, total 7339.
+    // Gold II floor = 7339 - 339 = 7000, ceiling = 7000 + 750 = 7750.
     const info = getRankInfo('Gold II', 7339);
     expect(info).not.toBeNull();
     expect(info!.tierName).toBe('Gold');
     expect(info!.division).toBe(2);
-    expect(info!.divisionFloor).toBe(6800);
-    expect(info!.divisionCeiling).toBe(7500);
-    // Progress: (7339 - 6800) / (7500 - 6800) = 539/700 = ~77%
+    expect(info!.divisionFloor).toBe(7000);
+    expect(info!.divisionCeiling).toBe(7750);
+    // Progress: (7339 - 7000) / (7750 - 7000) = 339/750 = ~45.2%
     const progress = (7339 - info!.divisionFloor) / (info!.divisionCeiling! - info!.divisionFloor);
-    expect(progress).toBeGreaterThan(0.7);
-    expect(progress).toBeLessThan(0.8);
+    expect(progress).toBeCloseTo(339 / 750, 2);
+    // Division RP matches in-game display
+    expect(7339 - info!.divisionFloor).toBe(339);
+    expect(info!.divisionCeiling! - info!.divisionFloor).toBe(750);
   });
 });
 

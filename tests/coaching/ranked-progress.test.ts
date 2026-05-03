@@ -47,9 +47,9 @@ describe('RankedProgressRule', () => {
   const rule = new RankedProgressRule();
 
   it('should calculate games needed to reach next rank tier', () => {
-    // Player at Gold IV (5500 RP), needs to reach Gold III (6100 RP)
-    // Average RP gain: +40 per game => 600/40 = ~15 games
-    // Season 24: Gold IV = 5400-6099 (700 RP per division)
+    // Player at Gold IV (5600 RP), needs to reach Gold III (6250 RP)
+    // Average RP gain: +40 per game => 650/40 = ~17 games
+    // In-game calibrated: Gold IV = 5500-6249 (750 RP per division)
     const rankedMatches = [
       { rp_change: 50, placement: 5 },
       { rp_change: 30, placement: 8 },
@@ -57,7 +57,7 @@ describe('RankedProgressRule', () => {
       { rp_change: 45, placement: 4 },
       { rp_change: 35, placement: 7 },
     ];
-    const playerRank = { rank_name: 'Gold IV', rank_score: 5500 };
+    const playerRank = { rank_name: 'Gold IV', rank_score: 5600 };
     const ctx = createRankedContext(rankedMatches, playerRank);
 
     const results = rule.evaluatePostMatch(1, 1, ctx);
@@ -72,7 +72,7 @@ describe('RankedProgressRule', () => {
 
   it('should detect RP gain/loss trend', () => {
     // 5 ranked games with positive RP trend
-    // Season 24: Platinum III = 9000-9799 (800 RP per division)
+    // In-game calibrated: Platinum III = 9375-10249 (875 RP per division)
     const rankedMatches = [
       { rp_change: 60, placement: 3 },
       { rp_change: 50, placement: 5 },
@@ -80,7 +80,7 @@ describe('RankedProgressRule', () => {
       { rp_change: 55, placement: 4 },
       { rp_change: 45, placement: 5 },
     ];
-    const playerRank = { rank_name: 'Platinum III', rank_score: 9200 };
+    const playerRank = { rank_name: 'Platinum III', rank_score: 9500 };
     const ctx = createRankedContext(rankedMatches, playerRank);
 
     const results = rule.evaluatePostMatch(1, 1, ctx);
@@ -93,8 +93,8 @@ describe('RankedProgressRule', () => {
   });
 
   it('should warn about demotion risk when close to tier floor', () => {
-    // Player at Gold III with 6120 RP (floor is 6100 for Gold III), only 20 RP above
-    // Season 24: Gold III = 6100-6799 (700 RP per division)
+    // Player at Gold III with 6270 RP (floor is 6250 for Gold III), only 20 RP above
+    // In-game calibrated: Gold III = 6250-6999 (750 RP per division)
     // Recent games have negative RP
     const rankedMatches = [
       { rp_change: -20, placement: 15 },
@@ -103,7 +103,7 @@ describe('RankedProgressRule', () => {
       { rp_change: -10, placement: 12 },
       { rp_change: -30, placement: 18 },
     ];
-    const playerRank = { rank_name: 'Gold III', rank_score: 6120 };
+    const playerRank = { rank_name: 'Gold III', rank_score: 6270 };
     const ctx = createRankedContext(rankedMatches, playerRank);
 
     const results = rule.evaluatePostMatch(1, 1, ctx);
@@ -116,14 +116,14 @@ describe('RankedProgressRule', () => {
   });
 
   it('should celebrate rank milestones', () => {
-    // Player just crossed into Diamond IV (score just above threshold at 11400)
-    // Season 24: Diamond IV = 11400-12299 (900 RP per division)
+    // Player just crossed into Diamond IV (score just above threshold at 12000)
+    // In-game calibrated: Diamond IV = 12000-12999 (1000 RP per division)
     const rankedMatches = [
       { rp_change: 60, placement: 2 },
       { rp_change: 50, placement: 3 },
       { rp_change: 40, placement: 5 },
     ];
-    const playerRank = { rank_name: 'Diamond IV', rank_score: 11450 };
+    const playerRank = { rank_name: 'Diamond IV', rank_score: 12050 };
     const ctx = createRankedContext(rankedMatches, playerRank);
 
     const results = rule.evaluatePostMatch(1, 1, ctx);

@@ -39,8 +39,9 @@ describe('RankedProgress', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('renders rank name and RP when data is available', () => {
-    // Gold II range: 6800-7499 (Season 24 thresholds)
+  it('renders rank name and division RP when data is available', () => {
+    // Gold II range: 7000-7749 (in-game calibrated thresholds)
+    // 7339 - 7000 = 339 RP into division, 750 RP per division
     useMatchStore.getState().updateFromIpc({
       type: 'rank',
       rankName: 'Gold II',
@@ -50,7 +51,7 @@ describe('RankedProgress', () => {
     render(<RankedProgress />);
     expect(screen.getByText('Ranked')).toBeDefined();
     expect(screen.getByText('Gold II')).toBeDefined();
-    expect(screen.getByText(/7\.3K.*RP/)).toBeDefined();
+    expect(screen.getByText('339 / 750 RP')).toBeDefined();
   });
 
   it('renders Gold color class for Gold tier', () => {
@@ -66,7 +67,7 @@ describe('RankedProgress', () => {
   });
 
   it('renders progress bar for ranked tiers with divisions', () => {
-    // Silver III range: 3600-4199 (Season 24 thresholds)
+    // Silver III range: 3625-4249 (in-game calibrated thresholds, 625/div)
     useMatchStore.getState().updateFromIpc({
       type: 'rank',
       rankName: 'Silver III',

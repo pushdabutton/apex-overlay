@@ -1,7 +1,7 @@
 import React, { memo, useMemo } from 'react';
 import { ProgressBar } from '../../components/ProgressBar';
 import { useMatchStore } from '../../stores/match-store';
-import { getRankInfo, rankColorClass, formatCompact } from '../../../shared/utils';
+import { getRankInfo, rankColorClass } from '../../../shared/utils';
 
 function RankedProgressInner() {
   const rankName = useMatchStore((s) => s.rankName);
@@ -23,11 +23,10 @@ function RankedProgressInner() {
       ? `${rankInfo.tierName} ${'I'.repeat(rankInfo.division)}`
       : rankInfo.tierName;
 
-  // Calculate progress percentage
+  // Calculate division progress (RP within current division, matching in-game display)
   const hasProgress = rankInfo.divisionCeiling !== null;
-  const progressPercent = hasProgress
-    ? ((rankScore - rankInfo.divisionFloor) / (rankInfo.divisionCeiling! - rankInfo.divisionFloor)) * 100
-    : 0;
+  const divisionWidth = hasProgress ? rankInfo.divisionCeiling! - rankInfo.divisionFloor : 0;
+  const rpInDivision = hasProgress ? rankScore - rankInfo.divisionFloor : 0;
 
   // Map tier name to ProgressBar color prop
   const progressColor = (() => {
@@ -47,13 +46,15 @@ function RankedProgressInner() {
           {displayName}
         </span>
         <span className="text-overlay-xs text-white/50">
-          {formatCompact(rankScore)} RP
+          {hasProgress
+            ? `${rpInDivision} / ${divisionWidth} RP`
+            : `${rankScore} RP`}
         </span>
       </div>
       {hasProgress ? (
         <ProgressBar
-          current={rankScore - rankInfo.divisionFloor}
-          max={rankInfo.divisionCeiling! - rankInfo.divisionFloor}
+          current={rpInDivision}
+          max={divisionWidth}
           color={progressColor}
         />
       ) : (

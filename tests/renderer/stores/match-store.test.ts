@@ -110,7 +110,7 @@ describe('Match Store', () => {
   });
 
   it('updateFromIpc handles rank updates', () => {
-    // Gold II range: 6800-7499 (Season 24 thresholds)
+    // Gold II range: 7000-7749 (in-game calibrated thresholds)
     useMatchStore.getState().updateFromIpc({
       type: 'rank',
       rankName: 'Gold II',
