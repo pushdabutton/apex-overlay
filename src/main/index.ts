@@ -6,6 +6,10 @@
 // ============================================================
 
 import { app, BrowserWindow } from 'electron';
+import { config as loadEnv } from 'dotenv';
+
+// Load .env from project root (API keys, etc.)
+loadEnv();
 
 // GPU fallback for Linux/WSL where hardware GPU may not be available.
 // Must be set before app.whenReady().
@@ -30,7 +34,7 @@ import { WeaponKillRepository } from './db/repositories/weapon-kill-repo';
 import { IPC } from '../shared/ipc-channels';
 import { CoachingRepository } from './db/repositories/coaching-repo';
 import type { DomainEvent, Match } from '../shared/types';
-import { nowISO } from '../shared/utils';
+import { nowISO, formatRankName } from '../shared/utils';
 
 let gepManager: GEPManager;
 let coachingEngine: CoachingEngine;
@@ -105,6 +109,11 @@ async function bootstrap(): Promise<void> {
 
   processor.on('player-name', (name: string) => {
     broadcastToAll(IPC.PLAYER_NAME, { name });
+    // Trigger API profile fetch using the GEP-detected player name.
+    // This is the primary mechanism for getting rank data -- the
+    // settings DB api.playerName is rarely populated manually, but
+    // GEP always provides the player name.
+    apiScheduler.refreshPlayerProfile(name);
   });
 
   processor.on('game-mode', (mode: { gameMode: string | null; modeName: string | null }) => {
@@ -157,6 +166,28 @@ async function bootstrap(): Promise<void> {
   });
 
   await gepManager.initialize();
+
+  // 8b. Wire API player profile to rank update pipeline.
+  // GEP's "rank" feature only sends "victory" (true/false) -- it does NOT
+  // send rank name or score as info updates. The only source of rank data
+  // is the mozambiquehe.re API player profile. When a profile arrives,
+  // extract rank data and broadcast as a MATCH_UPDATE with type: 'rank'
+  // so the RankedProgress component can display it.
+  apiScheduler.onPlayerProfile((profile) => {
+    if (profile.rankName && profile.rankName !== 'Unknown') {
+      // The API returns rankName as just the tier ("Gold") and rankDivision
+      // as a number (2 = Division II). Combine them into "Gold II" format
+      // so parseRankName() + getRankInfo() can calculate the correct
+      // division floor/ceiling for the progress bar.
+      const fullRankName = formatRankName(profile.rankName, profile.rankDivision);
+      console.log(`[apex-coach] API rank data: ${fullRankName} (${profile.rankScore} RP, div ${profile.rankDivision})`);
+      broadcastToAll(IPC.MATCH_UPDATE, {
+        type: 'rank',
+        rankName: fullRankName,
+        rankScore: profile.rankScore,
+      });
+    }
+  });
 
   // 9. Start API polling
   await apiScheduler.start();
@@ -305,6 +336,14 @@ function handleDomainEvent(
           console.error('[apex-coach] Coaching evaluation failed:', err);
         }
       }
+
+      // Refresh rank data after a delay. The mozambiquehe.re API caches
+      // player data, so we wait 15 seconds to give it time to update with
+      // the new RP from the match that just ended. skipCache=true bypasses
+      // our in-memory cache to ensure we get fresh data from the API.
+      setTimeout(() => {
+        apiScheduler.refreshPlayerProfile(undefined, true);
+      }, 15_000);
 
       // Delay clearing per-match accumulators so the post-match window
       // has time to receive and render the data. The post-match summary

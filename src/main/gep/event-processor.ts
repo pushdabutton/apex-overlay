@@ -8,7 +8,7 @@
 
 import { EventEmitter } from 'events';
 import { mapGepEvent } from './event-map';
-import { cleanLegendName } from '../../shared/utils';
+import { cleanLegendName, cleanWeaponName } from '../../shared/utils';
 import type { DomainEvent, GameMode } from '../../shared/types';
 
 export interface SessionStats {
@@ -402,14 +402,36 @@ export class EventProcessor extends EventEmitter {
 
       case 'weapons': {
         // Equipped weapons: { weapon0: "R-301 Carbine", weapon1: "Alternator SMG" }
+        //
+        // GEP sends weapon slot keys in inconsistent formats across versions:
+        //   - "weapon0" / "weapon1"     (canonical, ow-native documented format)
+        //   - "weapon_0" / "weapon_1"   (ow-electron variant, causes RE-45 "Unknown" bug)
+        //   - "0" / "1"                 (bare numeric, seen in some builds)
+        //
+        // We normalize ALL slot key variants to canonical "weapon0"/"weapon1" so
+        // the kill event fallback and renderer WeaponTracker can reliably access them.
+        // Non-slot keys like "inUse" pass through unchanged.
+        //
+        // Weapon NAMES may also arrive in non-display formats:
+        //   - Localization keys: "#weapon_re45_auto" -> "RE-45 Auto"
+        //   - Internal names: "weapon_re45_auto" -> "RE-45 Auto"
+        //   - Already-clean display names pass through
         if (typeof value === 'object' && value !== null) {
           this.equippedWeapons = {};
           const weapons = value as Record<string, unknown>;
-          for (const [slot, weaponName] of Object.entries(weapons)) {
-            if (typeof weaponName === 'string' && weaponName.length > 0) {
-              this.equippedWeapons[slot] = weaponName;
+          for (const [slot, rawWeaponName] of Object.entries(weapons)) {
+            const normalizedSlot = this.normalizeWeaponSlotKey(slot);
+            const cleanedName = cleanWeaponName(rawWeaponName as string);
+            if (cleanedName !== 'Unknown') {
+              if (normalizedSlot !== slot || cleanedName !== String(rawWeaponName)) {
+                console.log(`[EventProcessor][WEAPON-DEBUG] Normalized: slot "${slot}"->"${normalizedSlot}", name "${rawWeaponName}"->"${cleanedName}"`);
+              }
+              this.equippedWeapons[normalizedSlot] = cleanedName;
+            } else {
+              console.log(`[EventProcessor][WEAPON-DEBUG] Skipped empty/null weapon in slot "${slot}" (raw: ${JSON.stringify(rawWeaponName)})`);
             }
           }
+          console.log(`[EventProcessor][WEAPON-DEBUG] Equipped weapons: ${JSON.stringify(this.equippedWeapons)}`);
           this.emit('weapons-update', { ...this.equippedWeapons });
         }
         break;
@@ -572,6 +594,66 @@ export class EventProcessor extends EventEmitter {
         break;
       }
 
+      // ------------------------------------------------------------------
+      // Rank info updates: GEP's "rank" feature only sends "victory" (true/false),
+      // but we handle several possible key names defensively in case ow-electron
+      // sends rank data differently than ow-native, or future GEP versions add them.
+      //
+      // The primary rank data source is the mozambiquehe.re API player profile,
+      // which feeds into the rank update via the main process pipeline.
+      // ------------------------------------------------------------------
+      case 'rank_info': {
+        // Hypothetical: { rankName: "Gold IV", rankScore: 4200, rankDiv: 4 }
+        console.log(`[EventProcessor][RANK-DEBUG] rank_info received: ${JSON.stringify(value)}`);
+        if (typeof value === 'object' && value !== null) {
+          const rankObj = value as Record<string, unknown>;
+          const rankName = (rankObj.rankName ?? rankObj.rank_name ?? rankObj.name) as string;
+          const rankScore = this.safeInt(rankObj.rankScore ?? rankObj.rank_score ?? rankObj.score ?? rankObj.rp);
+          if (rankName && typeof rankName === 'string' && rankName.length > 0) {
+            const event: DomainEvent = {
+              type: 'RANK_UPDATE',
+              rankName,
+              rankScore,
+              timestamp: Date.now(),
+            };
+            this.pendingBatch.push(event);
+            this.emit('domain-event', event);
+            console.log(`[EventProcessor][RANK-DEBUG] Emitted RANK_UPDATE from rank_info: ${rankName} (${rankScore} RP)`);
+          }
+        }
+        break;
+      }
+
+      case 'rank_score':
+      case 'rankScore': {
+        // Standalone rank score update (no tier name included)
+        console.log(`[EventProcessor][RANK-DEBUG] ${key} received: ${JSON.stringify(value)}`);
+        const score = this.safeInt(value);
+        if (score > 0) {
+          this.emit('rank-score-update', score);
+        }
+        break;
+      }
+
+      case 'current_rank':
+      case 'rank_tier':
+      case 'rank_level': {
+        // Alternative rank tier key names
+        console.log(`[EventProcessor][RANK-DEBUG] ${key} received: ${JSON.stringify(value)}`);
+        if (typeof value === 'string' && value.length > 0) {
+          const event: DomainEvent = {
+            type: 'RANK_UPDATE',
+            rankName: value,
+            rankScore: 0,
+            timestamp: Date.now(),
+          };
+          this.pendingBatch.push(event);
+          this.emit('domain-event', event);
+          console.log(`[EventProcessor][RANK-DEBUG] Emitted RANK_UPDATE from ${key}: ${value}`);
+        }
+        break;
+      }
+
       case 'totalDamageDealt': {
         // Real-time damage counter from the damage feature.
         // This is a running total of damage dealt in the current match,
@@ -692,8 +774,13 @@ export class EventProcessor extends EventEmitter {
             }
           }
         } else {
-          // Log unknown keys for debugging during development
-          // console.log(`[EventProcessor] Unhandled info key: "${key}" (feature: ${feature ?? 'unknown'})`);
+          // Log unhandled keys, especially from the "rank" feature which may
+          // have keys we haven't seen yet in ow-electron.
+          if (feature === 'rank') {
+            console.log(`[EventProcessor][RANK-DEBUG] Unhandled rank feature key: "${key}" = ${JSON.stringify(value)}`);
+          } else {
+            // console.log(`[EventProcessor] Unhandled info key: "${key}" (feature: ${feature ?? 'unknown'})`);
+          }
         }
         break;
     }
@@ -710,10 +797,35 @@ export class EventProcessor extends EventEmitter {
     if (lower.includes('ranked')) return 'ranked';
     if (lower.includes('arena')) return 'arenas';
     if (lower.includes('ltm') || lower.includes('limited')) return 'ltm';
-    if (lower.includes('battle') || lower.includes('br') || lower.includes('trios') || lower.includes('duos')) {
+    // Match both singular and plural: "trio"/"trios", "duo"/"duos",
+    // and GEP localization key formats: "#PL_TRIO", "#PL_DUO"
+    if (lower.includes('battle') || lower.includes('br')
+      || lower.includes('trio') || lower.includes('duo')) {
       return 'battle_royale';
     }
     return 'unknown';
+  }
+
+  /**
+   * Normalize a weapon slot key to canonical "weapon0"/"weapon1" format.
+   * GEP sends slot keys in multiple inconsistent formats:
+   *   "weapon0"  -> "weapon0" (already canonical)
+   *   "weapon_0" -> "weapon0" (ow-electron underscore variant)
+   *   "0"        -> "weapon0" (bare numeric variant)
+   * Non-slot keys like "inUse" pass through unchanged.
+   */
+  private normalizeWeaponSlotKey(slot: string): string {
+    // "weapon_0" -> "weapon0", "weapon_1" -> "weapon1"
+    const underscoreMatch = slot.match(/^weapon_(\d+)$/);
+    if (underscoreMatch) {
+      return `weapon${underscoreMatch[1]}`;
+    }
+    // "0" -> "weapon0", "1" -> "weapon1"
+    if (/^\d+$/.test(slot)) {
+      return `weapon${slot}`;
+    }
+    // Already canonical ("weapon0") or non-slot key ("inUse")
+    return slot;
   }
 
   /**
@@ -818,6 +930,7 @@ export class EventProcessor extends EventEmitter {
             ?? this.equippedWeapons['0']
             ?? Object.values(this.equippedWeapons)[0]
             ?? 'Unknown';
+          console.log(`[EventProcessor][WEAPON-DEBUG] Kill event had no weapon data, fell back to equipped: "${killWeapon}" (equipped: ${JSON.stringify(this.equippedWeapons)})`);
         }
         if (killWeapon && killWeapon !== 'Unknown') {
           const existing = this.weaponKills.get(killWeapon) ?? { kills: 0, headshots: 0, damage: 0 };

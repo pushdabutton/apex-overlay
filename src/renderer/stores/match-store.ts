@@ -37,6 +37,9 @@ export interface MatchState {
   placement: number | null;
   isInMatch: boolean;
   coachingInsights: MatchInsight[];
+  rankName: string | null;
+  rankScore: number | null;
+  weapons: Record<string, string>;
 
   // Actions
   updateFromIpc: (data: Record<string, unknown>) => void;
@@ -58,6 +61,9 @@ const INITIAL_STATE = {
   placement: null as number | null,
   isInMatch: false,
   coachingInsights: [] as MatchInsight[],
+  rankName: null as string | null,
+  rankScore: null as number | null,
+  weapons: {} as Record<string, string>,
 };
 
 export const useMatchStore = create<MatchState>((set) => ({
@@ -102,6 +108,20 @@ export const useMatchStore = create<MatchState>((set) => ({
       // Handle placement updates
       if (data.type === 'placement' && typeof data.position === 'number') {
         return { ...state, placement: data.position as number };
+      }
+
+      // Handle rank updates
+      if (data.type === 'rank' && typeof data.rankName === 'string') {
+        return {
+          ...state,
+          rankName: data.rankName as string,
+          rankScore: typeof data.rankScore === 'number' ? data.rankScore : state.rankScore,
+        };
+      }
+
+      // Handle weapon updates
+      if (data.type === 'weapons' && typeof data.weapons === 'object' && data.weapons !== null) {
+        return { ...state, weapons: data.weapons as Record<string, string> };
       }
 
       // Fallback: apply flat keys directly (backward compatible with older format)

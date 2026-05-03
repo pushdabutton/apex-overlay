@@ -3,6 +3,7 @@ import { StatCard } from '../../components/StatCard';
 import { useMatchStore } from '../../stores/match-store';
 import { useSessionStore } from '../../stores/session-store';
 import { IPC } from '../../../shared/ipc-channels';
+import { formatRankName } from '../../../shared/utils';
 
 function SessionTrackerInner() {
   const kills = useMatchStore((s) => s.kills);
@@ -20,9 +21,34 @@ function SessionTrackerInner() {
     const unsubSession = window.apexCoach.on(IPC.SESSION_UPDATE, (data) => {
       useSessionStore.getState().updateFromIpc(data as Record<string, unknown>);
     });
+    const unsubWeapons = window.apexCoach.on(IPC.WEAPONS_UPDATE, (data) => {
+      useMatchStore.getState().updateFromIpc({
+        type: 'weapons',
+        weapons: data,
+      } as Record<string, unknown>);
+    });
+    // Listen for API player profile to extract rank data.
+    // GEP's "rank" feature only sends "victory" (true/false) --
+    // the actual rank name and score come from the mozambiquehe.re API.
+    // The API returns rankName as just the tier ("Gold") and rankDivision
+    // as a number (2 = Division II). Combine them into "Gold II" format.
+    const unsubProfile = window.apexCoach.on(IPC.API_PLAYER_PROFILE, (data) => {
+      const profile = data as Record<string, unknown>;
+      if (profile.rankName && typeof profile.rankName === 'string' && profile.rankName !== 'Unknown') {
+        const division = typeof profile.rankDivision === 'number' ? profile.rankDivision : 0;
+        const fullRankName = formatRankName(profile.rankName as string, division);
+        useMatchStore.getState().updateFromIpc({
+          type: 'rank',
+          rankName: fullRankName,
+          rankScore: typeof profile.rankScore === 'number' ? profile.rankScore : 0,
+        } as Record<string, unknown>);
+      }
+    });
     return () => {
       unsubMatch();
       unsubSession();
+      unsubWeapons();
+      unsubProfile();
     };
   }, []);
 

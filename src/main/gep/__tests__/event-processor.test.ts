@@ -1573,4 +1573,320 @@ describe('EventProcessor', () => {
       expect(legends.length).toBe(0);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Weapon Slot Key Normalization (Bug Fix: RE-45 showing as "Unknown")
+  //
+  // GEP sends weapon slot keys in inconsistent formats across different
+  // game versions and platforms. The handler must normalize ALL variants
+  // to canonical "weapon0"/"weapon1" so the kill event fallback and
+  // renderer can reliably find the equipped weapons.
+  // -----------------------------------------------------------------------
+  describe('weapon slot key normalization', () => {
+    it('should normalize underscore keys (weapon_0 -> weapon0)', () => {
+      const weaponsCallback = vi.fn();
+      processor.on('weapons-update', weaponsCallback);
+
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon_0: 'RE-45 Auto', weapon_1: 'R-301 Carbine' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      const weapons = processor.getEquippedWeapons();
+      expect(weapons).toEqual({
+        weapon0: 'RE-45 Auto',
+        weapon1: 'R-301 Carbine',
+      });
+      expect(weaponsCallback).toHaveBeenCalledWith({
+        weapon0: 'RE-45 Auto',
+        weapon1: 'R-301 Carbine',
+      });
+    });
+
+    it('should normalize bare numeric keys (0 -> weapon0)', () => {
+      const weaponsCallback = vi.fn();
+      processor.on('weapons-update', weaponsCallback);
+
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { '0': 'VK-47 Flatline', '1': 'Peacekeeper' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      const weapons = processor.getEquippedWeapons();
+      expect(weapons).toEqual({
+        weapon0: 'VK-47 Flatline',
+        weapon1: 'Peacekeeper',
+      });
+    });
+
+    it('should pass through already-canonical weapon0/weapon1 keys unchanged', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon0: 'Wingman', weapon1: 'Mastiff Shotgun' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      const weapons = processor.getEquippedWeapons();
+      expect(weapons).toEqual({
+        weapon0: 'Wingman',
+        weapon1: 'Mastiff Shotgun',
+      });
+    });
+
+    it('should use normalized weapons in kill event weapon fallback', () => {
+      // Setup: send weapons with underscore format
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon_0: 'RE-45 Auto', weapon_1: 'Devotion LMG' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      // Start a match so kills track properly
+      processor.processInfoUpdate({
+        info: { key: 'phase', value: 'aircraft', feature: 'match_info' },
+      });
+
+      // Send a kill event WITHOUT weapon data (weapon defaults to "Unknown")
+      // The fallback should find the normalized weapon0 = "RE-45 Auto"
+      processor.processRawEvent('kill', JSON.stringify({}));
+
+      const weaponKills = processor.getWeaponKills();
+      const re45Entry = weaponKills.find((w) => w.weapon === 'RE-45 Auto');
+      expect(re45Entry).toBeDefined();
+      expect(re45Entry!.kills).toBe(1);
+    });
+
+    it('should handle mixed key formats (some normalized, some not)', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon0: 'HAVOC Rifle', weapon_1: 'Triple Take' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      const weapons = processor.getEquippedWeapons();
+      expect(weapons).toEqual({
+        weapon0: 'HAVOC Rifle',
+        weapon1: 'Triple Take',
+      });
+    });
+
+    it('should handle inUse key alongside slot keys', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon_0: 'RE-45 Auto', weapon_1: 'R-301 Carbine', inUse: 'RE-45 Auto' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      const weapons = processor.getEquippedWeapons();
+      expect(weapons.weapon0).toBe('RE-45 Auto');
+      expect(weapons.weapon1).toBe('R-301 Carbine');
+      // inUse should be preserved as-is (not a slot key)
+      expect(weapons.inUse).toBe('RE-45 Auto');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Weapon Name Cleaning (Bug Fix: RE-45 showing as "Unknown")
+  //
+  // ow-electron may send weapon names as localization keys or internal
+  // engine names instead of clean display names. The weapons handler
+  // should clean them via cleanWeaponName().
+  // -----------------------------------------------------------------------
+  describe('weapon name cleaning', () => {
+    it('should clean localization key weapon names (#weapon_re45_auto -> RE-45 Auto)', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon0: '#weapon_re45_auto', weapon1: '#weapon_r301_carbine' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      const weapons = processor.getEquippedWeapons();
+      expect(weapons.weapon0).toBe('RE-45 Auto');
+      expect(weapons.weapon1).toBe('R-301 Carbine');
+    });
+
+    it('should clean internal engine weapon names (weapon_flatline -> VK-47 Flatline)', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon0: 'weapon_flatline', weapon1: 'weapon_peacekeeper' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      const weapons = processor.getEquippedWeapons();
+      expect(weapons.weapon0).toBe('VK-47 Flatline');
+      expect(weapons.weapon1).toBe('Peacekeeper');
+    });
+
+    it('should skip empty/null weapon name values', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon0: '', weapon1: 'R-99' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      const weapons = processor.getEquippedWeapons();
+      expect(weapons.weapon0).toBeUndefined();
+      expect(weapons.weapon1).toBe('R-99');
+    });
+
+    it('should pass through already-clean display names', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon0: 'RE-45 Auto', weapon1: 'Alternator SMG' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      const weapons = processor.getEquippedWeapons();
+      expect(weapons.weapon0).toBe('RE-45 Auto');
+      expect(weapons.weapon1).toBe('Alternator SMG');
+    });
+
+    it('should clean weapon names in combined slot+name normalization', () => {
+      // Both slot key and weapon name need normalization
+      processor.processInfoUpdate({
+        info: {
+          key: 'weapons',
+          value: { weapon_0: '#weapon_re45_auto', '1': 'weapon_mastiff' },
+          feature: 'inventory',
+          category: 'me',
+        },
+      });
+
+      const weapons = processor.getEquippedWeapons();
+      expect(weapons.weapon0).toBe('RE-45 Auto');
+      expect(weapons.weapon1).toBe('Mastiff Shotgun');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Rank Info Handlers (Bug Fix: Rank bar completely missing)
+  //
+  // GEP's "rank" feature only sends "victory" (true/false). It does NOT
+  // send rank name or score. These handlers exist as defensive coverage
+  // in case ow-electron sends rank data via unexpected keys, and to
+  // support the API-sourced rank data pipeline.
+  // -----------------------------------------------------------------------
+  describe('rank info handlers', () => {
+    it('should emit RANK_UPDATE from rank_info object', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'rank_info',
+          value: { rankName: 'Gold IV', rankScore: 4200, rankDiv: 4 },
+          feature: 'rank',
+        },
+      });
+
+      const rankEvents = emittedEvents.filter((e) => e.type === 'RANK_UPDATE');
+      expect(rankEvents.length).toBe(1);
+      const rankEvent = rankEvents[0] as { type: 'RANK_UPDATE'; rankName: string; rankScore: number };
+      expect(rankEvent.rankName).toBe('Gold IV');
+      expect(rankEvent.rankScore).toBe(4200);
+    });
+
+    it('should emit RANK_UPDATE from rank_info with alternative field names', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'rank_info',
+          value: { rank_name: 'Platinum II', rank_score: 6500 },
+          feature: 'rank',
+        },
+      });
+
+      const rankEvents = emittedEvents.filter((e) => e.type === 'RANK_UPDATE');
+      expect(rankEvents.length).toBe(1);
+      const rankEvent = rankEvents[0] as { type: 'RANK_UPDATE'; rankName: string; rankScore: number };
+      expect(rankEvent.rankName).toBe('Platinum II');
+      expect(rankEvent.rankScore).toBe(6500);
+    });
+
+    it('should emit RANK_UPDATE from current_rank string key', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'current_rank',
+          value: 'Diamond III',
+          feature: 'rank',
+        },
+      });
+
+      const rankEvents = emittedEvents.filter((e) => e.type === 'RANK_UPDATE');
+      expect(rankEvents.length).toBe(1);
+      const rankEvent = rankEvents[0] as { type: 'RANK_UPDATE'; rankName: string; rankScore: number };
+      expect(rankEvent.rankName).toBe('Diamond III');
+      expect(rankEvent.rankScore).toBe(0); // No score with standalone tier key
+    });
+
+    it('should emit rank-score-update from rank_score key', () => {
+      const scoreCallback = vi.fn();
+      processor.on('rank-score-update', scoreCallback);
+
+      processor.processInfoUpdate({
+        info: {
+          key: 'rank_score',
+          value: 7800,
+          feature: 'rank',
+        },
+      });
+
+      expect(scoreCallback).toHaveBeenCalledWith(7800);
+    });
+
+    it('should not emit rank events for empty rank_info', () => {
+      processor.processInfoUpdate({
+        info: {
+          key: 'rank_info',
+          value: {},
+          feature: 'rank',
+        },
+      });
+
+      const rankEvents = emittedEvents.filter((e) => e.type === 'RANK_UPDATE');
+      expect(rankEvents.length).toBe(0);
+    });
+
+    it('should not emit rank events for null rank_info', () => {
+      // Should not crash
+      processor.processInfoUpdate({
+        info: {
+          key: 'rank_info',
+          value: null,
+          feature: 'rank',
+        },
+      });
+
+      const rankEvents = emittedEvents.filter((e) => e.type === 'RANK_UPDATE');
+      expect(rankEvents.length).toBe(0);
+    });
+  });
 });

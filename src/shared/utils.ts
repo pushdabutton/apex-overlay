@@ -95,3 +95,262 @@ export function cleanLegendName(raw: string): string {
 
   return cleaned || 'Unknown';
 }
+
+/**
+ * Clean a GEP weapon name by stripping localization key format and normalizing.
+ *
+ * ow-native GEP typically sends clean weapon names ("R-301 Carbine", "RE-45 Auto"),
+ * but ow-electron may occasionally send:
+ *   - Localization keys: "#weapon_re45_auto" -> "RE-45 Auto"
+ *   - Internal names: "weapon_re45_auto" -> "RE-45 Auto"
+ *   - Empty strings or null -> "Unknown"
+ *
+ * Also normalizes known weapon internal names to their display names.
+ */
+export function cleanWeaponName(raw: string | null | undefined): string {
+  if (!raw || (typeof raw === 'string' && raw.trim().length === 0)) return 'Unknown';
+
+  let cleaned = raw.trim();
+
+  // Strip localization key prefix: #weapon_XXX or #weapon_XXX_NAME (case-insensitive)
+  const hashWeaponMatch = cleaned.match(/^#weapon_(.+)$/i);
+  if (hashWeaponMatch) {
+    cleaned = hashWeaponMatch[1];
+    // Also strip _NAME suffix if present (same pattern as legend names)
+    if (/[_]NAME$/i.test(cleaned)) {
+      cleaned = cleaned.replace(/[_]NAME$/i, '');
+    }
+  }
+
+  // Strip plain "weapon_" prefix (internal engine name without #, case-insensitive)
+  if (!hashWeaponMatch) {
+    const plainWeaponMatch = cleaned.match(/^weapon_(.+)$/i);
+    if (plainWeaponMatch) {
+      cleaned = plainWeaponMatch[1];
+    }
+  }
+
+  // Normalize known internal weapon names to display names.
+  // This map covers common Apex weapons where internal names differ
+  // from display names. Keys are lowercase for case-insensitive lookup.
+  const internalToDisplay: Record<string, string> = {
+    // Pistols
+    're45_auto': 'RE-45 Auto',
+    're45': 'RE-45 Auto',
+    'p2020': 'P2020',
+    'wingman': 'Wingman',
+    // SMGs
+    'alternator_smg': 'Alternator SMG',
+    'alternator': 'Alternator SMG',
+    'r99': 'R-99',
+    'r99_smg': 'R-99',
+    'car_smg': 'CAR SMG',
+    'car': 'CAR SMG',
+    'prowler_pdw': 'Prowler Burst PDW',
+    'prowler': 'Prowler Burst PDW',
+    'volt_smg': 'Volt SMG',
+    'volt': 'Volt SMG',
+    // Assault Rifles
+    'r301_carbine': 'R-301 Carbine',
+    'r301': 'R-301 Carbine',
+    'flatline': 'VK-47 Flatline',
+    'vk47_flatline': 'VK-47 Flatline',
+    'hemlok': 'Hemlok Burst AR',
+    'hemlok_burst_ar': 'Hemlok Burst AR',
+    'havoc': 'HAVOC Rifle',
+    'havoc_rifle': 'HAVOC Rifle',
+    'nemesis': 'Nemesis Burst AR',
+    'nemesis_burst_ar': 'Nemesis Burst AR',
+    // LMGs
+    'devotion_lmg': 'Devotion LMG',
+    'devotion': 'Devotion LMG',
+    'spitfire': 'M600 Spitfire',
+    'm600_spitfire': 'M600 Spitfire',
+    'lstar_emg': 'L-STAR EMG',
+    'lstar': 'L-STAR EMG',
+    'rampage_lmg': 'Rampage LMG',
+    'rampage': 'Rampage LMG',
+    // Shotguns
+    'peacekeeper': 'Peacekeeper',
+    'eva8_auto': 'EVA-8 Auto',
+    'eva8': 'EVA-8 Auto',
+    'mozambique_shotgun': 'Mozambique Shotgun',
+    'mozambique': 'Mozambique Shotgun',
+    'mastiff': 'Mastiff Shotgun',
+    'mastiff_shotgun': 'Mastiff Shotgun',
+    // Snipers
+    'longbow_dmr': 'Longbow DMR',
+    'longbow': 'Longbow DMR',
+    'kraber': 'Kraber .50-Cal Sniper',
+    'kraber_50cal': 'Kraber .50-Cal Sniper',
+    'sentinel': 'Sentinel',
+    'charge_rifle': 'Charge Rifle',
+    // Marksman
+    'triple_take': 'Triple Take',
+    'g7_scout': 'G7 Scout',
+    '3030_repeater': '30-30 Repeater',
+    'bocek_bow': 'Bocek Compound Bow',
+    'bocek': 'Bocek Compound Bow',
+    // Special
+    'melee': 'Melee',
+    'grenade': 'Grenade',
+    'thermite_grenade': 'Thermite Grenade',
+    'arc_star': 'Arc Star',
+    'frag_grenade': 'Frag Grenade',
+  };
+
+  const lookupKey = cleaned.toLowerCase();
+  if (internalToDisplay[lookupKey]) {
+    return internalToDisplay[lookupKey];
+  }
+
+  // If it wasn't in the map, return the cleaned string as-is.
+  // It's likely already a display name like "R-301 Carbine".
+  return cleaned || 'Unknown';
+}
+
+// ============================================================
+// Rank Utilities -- Parse rank names and calculate RP progress
+// ============================================================
+
+import { RANK_TIERS } from './constants';
+
+const DIVISION_ROMAN: Record<number, string> = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV' };
+
+/**
+ * Build a full rank display name from a tier name and division number.
+ *
+ * The mozambiquehe.re API returns rankName as just the tier ("Gold") and
+ * rankDiv as a number (2 = Division II). This function combines them into
+ * the format our UI expects: "Gold II".
+ *
+ * Master and Predator have no divisions, so they return just the tier name.
+ *
+ * @param tierName  The tier name from the API (e.g., "Gold", "Master")
+ * @param division  The division number (1-4, where 4 is lowest/entry)
+ * @returns Full rank name (e.g., "Gold II", "Master")
+ */
+export function formatRankName(tierName: string, division: number): string {
+  if (!tierName || tierName.trim().length === 0) return 'Unknown';
+
+  const normalized = tierName.charAt(0).toUpperCase() + tierName.slice(1).toLowerCase();
+
+  // Master and Predator have no divisions
+  if (normalized === 'Master' || normalized === 'Predator') return normalized;
+
+  // Division 0 or missing means API didn't provide it -- return tier only
+  if (!division || division < 1 || division > 4) return normalized;
+
+  return `${normalized} ${DIVISION_ROMAN[division]}`;
+}
+
+export interface RankInfo {
+  tierName: string;
+  division: number;
+  tierColor: string;
+  divisionFloor: number;
+  divisionCeiling: number | null; // null for Master/Predator (no ceiling)
+}
+
+/**
+ * Parse a rank name string like "Gold II" into tier + division.
+ * Returns tier name and division number (1-4, where 4 is lowest / entry).
+ * Master and Predator have no divisions (returns division 1).
+ *
+ * Handles formats: "Gold II", "Gold 2", "gold ii", "GOLD II", "Gold"
+ */
+export function parseRankName(rankName: string): { tierName: string; division: number } | null {
+  if (!rankName || rankName.trim().length === 0) return null;
+
+  const trimmed = rankName.trim();
+
+  // Roman numeral map
+  const romanMap: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4 };
+
+  // Try to match "TierName Division" pattern
+  const match = trimmed.match(/^(\w+)\s+([IV]+|\d)$/i);
+  if (match) {
+    const tierName = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
+    const divStr = match[2].toUpperCase();
+    const division = romanMap[divStr] ?? parseInt(divStr, 10);
+    if (isNaN(division) || division < 1 || division > 4) return null;
+    return { tierName, division };
+  }
+
+  // No division specified -- Master/Predator or standalone tier name
+  const tierName = trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+  return { tierName, division: 1 };
+}
+
+/**
+ * Calculate full rank info from rankName and rankScore.
+ * Uses RANK_TIERS to compute division floor/ceiling for the progress bar.
+ *
+ * Returns null if rank cannot be parsed or is not a recognized tier.
+ */
+export function getRankInfo(rankName: string, rankScore: number): RankInfo | null {
+  const parsed = parseRankName(rankName);
+  if (!parsed) return null;
+
+  const tier = RANK_TIERS.find(
+    (t) => t.name.toLowerCase() === parsed.tierName.toLowerCase(),
+  );
+  if (!tier) return null;
+
+  // Master and Predator have no divisions or RP ceiling
+  if (tier.rpPerDivision === null) {
+    // Calculate tier floor: sum of all lower tiers
+    let floor = 0;
+    for (const t of RANK_TIERS) {
+      if (t.name === tier.name) break;
+      floor += t.divisions * (t.rpPerDivision ?? 0);
+    }
+    return {
+      tierName: tier.name,
+      division: 1,
+      tierColor: tier.color,
+      divisionFloor: floor,
+      divisionCeiling: null,
+    };
+  }
+
+  // Calculate the RP floor for this tier
+  let tierFloor = 0;
+  for (const t of RANK_TIERS) {
+    if (t.name === tier.name) break;
+    tierFloor += t.divisions * (t.rpPerDivision ?? 0);
+  }
+
+  // Divisions count DOWN: IV is lowest (entry), I is highest.
+  // Division IV starts at tierFloor, III at tierFloor + rpPerDivision, etc.
+  // So division N starts at: tierFloor + (4 - division) * rpPerDivision
+  const divIndex = tier.divisions - parsed.division; // 0 for div IV, 3 for div I
+  const divisionFloor = tierFloor + divIndex * tier.rpPerDivision;
+  const divisionCeiling = divisionFloor + tier.rpPerDivision;
+
+  return {
+    tierName: tier.name,
+    division: parsed.division,
+    tierColor: tier.color,
+    divisionFloor,
+    divisionCeiling,
+  };
+}
+
+/**
+ * Map a tier name to a Tailwind rank color class name.
+ * Falls back to white/50 for unknown tiers.
+ */
+export function rankColorClass(tierName: string): string {
+  const map: Record<string, string> = {
+    rookie: 'text-white/50',
+    bronze: 'text-rank-bronze',
+    silver: 'text-rank-silver',
+    gold: 'text-rank-gold',
+    platinum: 'text-rank-platinum',
+    diamond: 'text-rank-diamond',
+    master: 'text-rank-master',
+    predator: 'text-rank-predator',
+  };
+  return map[tierName.toLowerCase()] ?? 'text-white/50';
+}

@@ -47,10 +47,10 @@ describe('MozambiqueClient.getSelectedLegend', () => {
     // Arrange: mock API returning selectedLegend in realtime
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: vi.fn().mockResolvedValue({
+      text: vi.fn().mockResolvedValue(JSON.stringify({
         global: { name: 'TestPlayer', uid: 12345 },
         realtime: { selectedLegend: 'Lifeline', currentState: 'inMatch' },
-      }),
+      })),
     });
 
     const { MozambiqueClient } = await import('../../src/main/api/mozambique-client');
@@ -73,7 +73,7 @@ describe('MozambiqueClient.getSelectedLegend', () => {
     // Some API responses have the legend under global.legends.selected
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: vi.fn().mockResolvedValue({
+      text: vi.fn().mockResolvedValue(JSON.stringify({
         global: {
           name: 'TestPlayer',
           uid: 12345,
@@ -82,7 +82,7 @@ describe('MozambiqueClient.getSelectedLegend', () => {
           },
         },
         realtime: { currentState: 'inMatch' },
-      }),
+      })),
     });
 
     const { MozambiqueClient } = await import('../../src/main/api/mozambique-client');
@@ -126,11 +126,11 @@ describe('MozambiqueClient.getSelectedLegend', () => {
   it('should return null when API response has no selectedLegend field', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: vi.fn().mockResolvedValue({
+      text: vi.fn().mockResolvedValue(JSON.stringify({
         global: { name: 'TestPlayer', uid: 12345 },
         realtime: { currentState: 'offline' },
         // No selectedLegend field
-      }),
+      })),
     });
 
     const { MozambiqueClient } = await import('../../src/main/api/mozambique-client');
@@ -157,10 +157,10 @@ describe('MozambiqueClient.getSelectedLegend', () => {
   it('should use the platform parameter in the API URL', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: vi.fn().mockResolvedValue({
+      text: vi.fn().mockResolvedValue(JSON.stringify({
         global: { name: 'ConsolePlayer' },
         realtime: { selectedLegend: 'Octane' },
-      }),
+      })),
     });
 
     const { MozambiqueClient } = await import('../../src/main/api/mozambique-client');
@@ -177,10 +177,10 @@ describe('MozambiqueClient.getSelectedLegend', () => {
   it('should default platform to PC when not specified', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: vi.fn().mockResolvedValue({
+      text: vi.fn().mockResolvedValue(JSON.stringify({
         global: { name: 'PCPlayer' },
         realtime: { selectedLegend: 'Bangalore' },
-      }),
+      })),
     });
 
     const { MozambiqueClient } = await import('../../src/main/api/mozambique-client');
@@ -196,10 +196,10 @@ describe('MozambiqueClient.getSelectedLegend', () => {
   it('should URL-encode the player name', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: vi.fn().mockResolvedValue({
+      text: vi.fn().mockResolvedValue(JSON.stringify({
         global: { name: 'Player With Spaces' },
         realtime: { selectedLegend: 'Caustic' },
-      }),
+      })),
     });
 
     const { MozambiqueClient } = await import('../../src/main/api/mozambique-client');
